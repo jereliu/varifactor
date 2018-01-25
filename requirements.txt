@@ -1,2 +1,3 @@
 numpy
+theano
 pymc3
