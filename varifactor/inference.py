@@ -1,2 +1,132 @@
-import theano.tensor as tt
+import logging
 import pymc3 as pm
+
+from varifactor.model import NEFactorModel
+
+# Set up logging.
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("inference")
+
+
+class NEFactorInference:
+    def __init__(self, model, param):
+        """
+        initialize inference module
+        :param model: model specified by varifactor.model.NEFactorModel
+        :param param: inference parameters specified in varifactor.setting
+        """
+        # check model type is pymc3
+        if not isinstance(model, NEFactorModel):
+            err_msg = "'model' type should be NEFactorModel, got: "
+            raise ValueError(err_msg + type(model).__name__)
+
+        logging.info('\n====================')
+        logging.info('initializing inference algorithms')
+
+        self.model = model.model
+        self.n = param.n
+        self.method = param.method
+        self.setting = param.setting
+        self.start = param.start
+        self._run_sampler = \
+            {
+                'Metropolis': self.run_metro,
+                'NUTS': self.run_nuts,
+                'ADVI': self.run_advi,
+                'NFVI': self.run_nfvi,
+                'OPVI': self.run_opvi,
+                'SVGD': self.run_svgd,
+            }
+
+        if self.start is None:
+            logging.info("'start' is None, setting to posterior mode..")
+            self.start = pm.find_MAP(model=self.model)
+
+        logging.info('done')
+        logging.info('\n====================')
+
+    def run(self):
+        """
+        wrapper function that runs algorithm specified by self.method
+        :return:
+        """
+        method_name = self.method
+        method_setting = self.setting[method_name]
+        sample = self._run_sampler[method_name](setting=method_setting)
+
+        return sample
+
+    def run_metro(self, setting=None):
+        logging.info('\n====================')
+        logging.info('running Metropolis-Hasting..')
+
+        if setting is None:
+            setting = self.setting['Metropolis']
+
+        with self.model:
+            mc = pm.Metropolis(**setting)
+            sample = pm.sample(draws=self.n, step=mc,
+                               start=self.start, tune=0)
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        return sample
+
+    def run_nuts(self, setting=None):
+        logging.info('\n====================')
+        logging.info('running NUTS..')
+
+        if setting is None:
+            setting = self.setting['NUTS']
+
+        with self.model:
+            mc = pm.NUTS(**setting)
+            sample = pm.sample(draws=self.n, step=mc,
+                               start=self.start, tune=0)
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        return sample
+
+    def run_advi(self, setting=None):
+        logging.info('\n====================')
+        logging.info('running Auto Diff VI..')
+
+        if setting is None:
+            setting = self.setting['ADVI']
+
+        with self.model:
+            vi = pm.ADVI(start=self.start)
+            sample = vi.fit(n=self.n)
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        return sample
+
+    def run_nfvi(self, setting=None):
+        logging.info('\n====================')
+        logging.info('running Norm Flow VI..')
+
+        if setting is None:
+            setting = self.setting['NFVI']
+
+        with self.model:
+            vi = pm.NFVI(start=self.start, **setting)
+            sample = vi.fit(n=self.n)
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        return sample
+
+    def run_opvi(self, setting=None):
+        raise NotImplementedError
+
+    def run_svgd(self, setting=None):
+        raise NotImplementedError
+
+
+

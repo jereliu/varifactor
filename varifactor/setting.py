@@ -7,4 +7,22 @@ param_model = {
     'v': {'var': 0.1, 'transform': 'identity'}
     }
 
-param_model = namedtuple('param', param_model.keys())(**param_model)
+
+param_infer = {
+    'n': 1000,
+    'method': 'NUTS',
+    'start': None,
+    'setting': {
+        'Metropolis': {'scaling': 1.},
+        'NUTS': {'target_accept': 0.8, 'max_treedepth': 10},
+        'ADVI': {}, # advi does not have non-trivial parameters...
+        'NFVI': {'flow': 'planar*10', 'jitter': 0.1},
+        'SVGD': {},
+        'OPVI': {}
+    }
+}
+
+param_model = namedtuple('model_param', param_model.keys())(**param_model)
+param_infer = namedtuple('infer_param', param_infer.keys())(**param_infer)
+
+
