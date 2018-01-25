@@ -1,5 +1,9 @@
+import logging
 import numpy as np
 
+# Set up logging.
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("data")
 
 def data(n, p, k, eps_sd=0.1,
          family="Gaussian",
@@ -69,12 +73,24 @@ def _random_nef(theta, family="Gaussian"):
         for d in range(p):
             for n in range(n):
                 y[n, d] = np.random.normal(mu_par[n, d], 1)
+
     elif family == "Poisson":
         lambda_par = np.exp(theta)
         for d in range(p):
             for n in range(n):
                 y[n, d] = np.random.poisson(lambda_par[n, d])
+
+    elif family == "Binomial":
+        # TODO: give options to specify binom_n
+        n_binom = 10
+        logging.warn('n is fixed to ' + str(n_binom) + ' for Binomial(n, p)')
+
+        p_par = 1/(1 + np.exp(theta))
+        for d in range(p):
+            for n in range(n):
+                y[n, d] = np.random.binomial(n=n_binom, p=p_par[n, d])
+
     else:
-        raise ValueError('distribution (' + str(family) + ') not defined')
+        raise ValueError('family "' + str(family) + '" not defined')
 
     return y

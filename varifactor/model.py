@@ -4,16 +4,12 @@ import pymc3 as pm
 import theano.tensor as tensor
 
 
-# initialization
-basic_model = pm.Model()
-
 # Set up logging.
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("model")
 
 
 class NEFactorModel(object):
-
     def __init__(self, y, param):
 
         # fill in parameter
@@ -35,34 +31,37 @@ class NEFactorModel(object):
 
         # initialize model
         nef_factor = pm.Model()
-        logging.info('====================')
-        logging.info('initializing model..')
+        logging.info('\n====================')
+        logging.info('initializing NEF factor analysis model..')
 
         with nef_factor:
 
             # initialize random variables
             u = pm.MvNormal(name="U", mu=0, cov=self.u_var * np.eye(self.n),
                             shape=(self.k, self.n),
-                            testval=np.random.normal(0, self.u_var, size=(self.k, self.n)))
+                            testval=np.random.normal(
+                                loc=0, scale=np.sqrt(self.u_var), size=(self.k, self.n))
+                            )
             v = pm.MvNormal(name="V", mu=0, cov=self.u_var * self.v_cov,
                             shape=(self.k, self.p),
-                            testval=np.random.normal(0, self.v_var, size=(self.k, self.p)))
-            u = u.T
-            v = v.T
+                            testval=np.random.normal(
+                                loc=0, scale=np.sqrt(self.v_var), size=(self.k, self.p))
+                            )
 
             e = pm.Normal(name="e", mu=0, sd=1, shape=(self.n, self.p),
                           testval=np.random.normal(0, self.eps_sd, size=(self.n, self.p)))
 
-            # factor transformation
-            u_t = pm.Deterministic("Ut", _factor_transform(u, name=self.u_trans))
-            v_t = pm.Deterministic("Vt", _factor_transform(v, name=self.v_trans))
+            # factor transformation, transpose then apply activation func to each column
+            u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_trans))
+            v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_trans))
 
             # theta
             theta = pm.Deterministic("theta", tensor.dot(u_t, v_t.T) + e)
             y = _nef_family(name="y", theta=theta, n=self.n, p=self.p,
                             family=self.family, observed=y)
 
-        logging.info('done')
+        logging.info('initialization done')
+        logging.info('\n====================')
         self.model = nef_factor
 
 
@@ -102,7 +101,17 @@ def _nef_family(theta, n, p, observed, family="Gaussian", name="y"):
         y = pm.Poisson(mu=lambda_par, shape=(n, p),
                        observed=observed, name=name + "_poisson")
 
+    elif family == "Binomial":
+        # TODO: give options to specify binom_n
+        n_binom = 10
+        logging.warn('n is fixed to ' + str(n_binom) + ' for Binomial(n, p)')
+
+        p_par = 1/(1 + pm.math.exp(-theta))
+        y = pm.Binomial(n=n_binom, p=p_par,
+                        shape=(n, p), observed=observed,
+                        name=name + "_binom_" + str(n_binom))
+
     else:
-        raise ValueError('distribution family (' + str(family) + ') not defined')
+        raise ValueError('distribution family (' + str(family) + ') not supported')
 
     return y
