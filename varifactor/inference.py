@@ -39,10 +39,12 @@ class NEFactorInference:
             }
 
         if self.start is None:
-            logging.info("'start' is None, setting to posterior mode..")
+            logging.info("no starting value provided! (i.e. param.start = None)")
+            logging.info("setting param.start to posterior mode..")
             self.start = pm.find_MAP(model=self.model)
 
-        logging.info('done')
+        logging.info('initialization done')
+        logging.info('to perform inference, execute .run()')
         logging.info('\n====================')
 
     def run(self):
@@ -95,11 +97,18 @@ class NEFactorInference:
         logging.info('running Auto Diff VI..')
 
         if setting is None:
+            # for compatible purpose, ADVI doesn't have parameters
             setting = self.setting['ADVI']
 
         with self.model:
             vi = pm.ADVI(start=self.start)
-            sample = vi.fit(n=self.n)
+
+            tracker = pm.callbacks.Tracker(
+                mean=vi.approx.mean.eval,  # callable that returns mean
+                std=vi.approx.std.eval  # callable that returns std
+            )
+
+            sample = vi.fit(n=self.n, callbacks=[tracker])
 
         logging.info('Done!')
         logging.info('\n====================')

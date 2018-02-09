@@ -3,6 +3,9 @@
 from varifactor.simu import data as generate_data
 from varifactor.model import NEFactorModel as Model
 from varifactor.inference import NEFactorInference as Infer
+from varifactor.metric import KSD
+from varifactor.util.kernel import rbf
+
 
 from varifactor.setting import param_model, param_infer
 
@@ -21,10 +24,12 @@ y_train, u_train, v_train, e_train = generate_data(N, P, K, family=family)
 nefm_model = Model(y_train, param_model)
 nefm_infer = Infer(nefm_model, param_infer)
 
-result_mh = nefm_infer.run_metro()
-result_nu = nefm_infer.run_nuts()
-result_ad = nefm_infer.run_advi()
-result_nf = nefm_infer.run_nfvi()
-
 result = nefm_infer.run()
+
+# # if want to run alternative sampler, pick on of below methods
+# result_mh = nefm_infer.run_metro()
+# result_nu = nefm_infer.run_nuts()
+# result_ad = nefm_infer.run_advi()
+# result_nf = nefm_infer.run_nfvi()
+
 

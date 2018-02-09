@@ -62,7 +62,11 @@ class NEFactorModel(object):
 
         logging.info('initialization done')
         logging.info('\n====================')
+
         self.model = nef_factor
+        # initialize gradient and hessian functions
+        self.grad = nef_factor.dlogp()
+        self.hess = nef_factor.d2logp()
 
 
 # helper functions

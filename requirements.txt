@@ -1,3 +1,5 @@
 numpy
 theano
 pymc3
+git+https://github.com/wittawatj/kernel-gof.git#egg=kernel-gof
+
