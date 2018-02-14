@@ -24,7 +24,8 @@ class NEFactorInference:
         logging.info('initializing inference algorithms')
 
         self.model = model.model
-        self.n = param.n
+        self.n = int(param.n)
+        self.chains = int(param.chains)
         self.method = param.method
         self.setting = param.setting
         self.start = param.start
@@ -47,12 +48,19 @@ class NEFactorInference:
         logging.info('to perform inference, execute .run()')
         logging.info('\n====================')
 
-    def run(self):
+    def run(self, method=None):
         """
-        wrapper function that runs algorithm specified by self.method
+                wrapper function that runs algorithm specified by self.method
+
+        :param method: method of choice, if none then use default value self.method
         :return:
         """
-        method_name = self.method
+
+        if method is None:
+            method_name = self.method
+        else:
+            method_name = method
+
         method_setting = self.setting[method_name]
         sample = self._run_sampler[method_name](setting=method_setting)
 
@@ -67,7 +75,8 @@ class NEFactorInference:
 
         with self.model:
             mc = pm.Metropolis(**setting)
-            sample = pm.sample(draws=self.n, step=mc,
+            sample = pm.sample(step=mc,
+                               draws=self.n, cores=self.chains,
                                start=self.start, tune=0)
 
         logging.info('Done!')
@@ -84,7 +93,8 @@ class NEFactorInference:
 
         with self.model:
             mc = pm.NUTS(**setting)
-            sample = pm.sample(draws=self.n, step=mc,
+            sample = pm.sample(step=mc,
+                               draws=self.n, cores=self.chains,
                                start=self.start, tune=0)
 
         logging.info('Done!')
@@ -113,7 +123,7 @@ class NEFactorInference:
         logging.info('Done!')
         logging.info('\n====================')
 
-        return sample
+        return sample, tracker
 
     def run_nfvi(self, setting=None):
         logging.info('\n====================')
