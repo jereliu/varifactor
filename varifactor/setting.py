@@ -3,13 +3,14 @@ from collections import namedtuple
 param_model = {
     'y': {'family': 'Gaussian'},
     'theta': {'k': 5, 'eps_sd': 0.1},
-    'u': {'var': 0.1, 'transform': 'identity', 'cov': None},
-    'v': {'var': 0.1, 'transform': 'identity'}
+    'u': {'var': 0.1, 'transform': 'identity'},
+    'v': {'var': 0.1, 'transform': 'identity', 'cov': None}
     }
 
 
 param_infer = {
-    'n': 1000,
+    'n': 1e4,
+    'chains': 4,
     'method': 'NUTS',
     'start': None,
     'setting': {
