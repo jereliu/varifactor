@@ -69,16 +69,16 @@ def _random_nef(theta, family="Gaussian"):
     y = np.zeros((n, p))
 
     if family == "Gaussian":
-        mu_par = -theta / 2
-        for d in range(p):
-            for n in range(n):
-                y[n, d] = np.random.normal(mu_par[n, d], 1)
+        mu_par = theta
+        for j in range(p):
+            for i in range(n):
+                y[i, j] = np.random.normal(mu_par[i, j], 1)
 
     elif family == "Poisson":
         lambda_par = np.exp(theta)
-        for d in range(p):
-            for n in range(n):
-                y[n, d] = np.random.poisson(lambda_par[n, d])
+        for j in range(p):
+            for i in range(n):
+                y[i, j] = np.random.poisson(lambda_par[i, j])
 
     elif family == "Binomial":
         # TODO: give options to specify binom_n
@@ -86,9 +86,9 @@ def _random_nef(theta, family="Gaussian"):
         logging.warn('n is fixed to ' + str(n_binom) + ' for Binomial(n, p)')
 
         p_par = 1/(1 + np.exp(theta))
-        for d in range(p):
-            for n in range(n):
-                y[n, d] = np.random.binomial(n=n_binom, p=p_par[n, d])
+        for j in range(p):
+            for i in range(n):
+                y[i, j] = np.random.binomial(n=n_binom, p=p_par[i, j])
 
     else:
         raise ValueError('family "' + str(family) + '" not defined')
