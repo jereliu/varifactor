@@ -10,26 +10,49 @@ logger = logging.getLogger("model")
 
 
 class NEFactorModel(object):
-    def __init__(self, y, param):
+    def __init__(self, y, param,
+                 u=None, v=None, e=None, track_transform=False):
+        """
+
+        :param y:
+        :param param:
+        :param u: observed value of u, if None then u is treated as an unobserved variable
+        :param v: observed value of v, if None then v is treated as an unobserved variable
+                    supplied v must match the assumed dimension
+        :param e: observed value of e, if None then e is treated as an unobserved variable
+        :param track_transform: whether track transformed factors
+        """
 
         # fill in parameter
         self.family = param.y['family']
         self.n, self.p = y.shape
         self.k = param.theta['k']
         self.eps_sd = param.theta['eps_sd']
-        self.u_var = param.u['var']
-        self.v_var = param.v['var']
-        self.u_trans = param.u['transform']
-        self.v_trans = param.v['transform']
+        self.u_par = param.u
+        self.v_par = param.v
 
-        if param.u['cov'] is None:
+        # specify variance-covariance structure for u,v
+        if param.v['cov'] is None:
             self.v_cov = np.eye(self.p)
         else:
             v_cov = param.u['cov']
             assert len(v_cov.shape) == 2 & v_cov.shape[0] == self.p & v_cov.shape[1] == self.p # check dimension
             self.v_cov = v_cov
 
+        # check supplied u, v, and e
+        if u is not None:
+            if not u.shape == (self.k, self.n):
+                raise ValueError("provided u does not match model dimension (%d, %d)" % (self.k, self.n))
+        if v is not None:
+            if not v.shape == (self.k, self.p):
+                raise ValueError("provided v does not match model dimension (%d, %d)" % (self.k, self.p))
+        if e is not None:
+            if not e.shape == (self.n, self.p):
+                raise ValueError("provided e does not match outcome dimension (%d, %d)" % (self.n, self.p))
+
+
         # initialize model
+
         nef_factor = pm.Model()
         logging.info('\n====================')
         logging.info('initializing NEF factor analysis model..')
@@ -37,23 +60,41 @@ class NEFactorModel(object):
         with nef_factor:
 
             # initialize random variables
-            u = pm.MvNormal(name="U", mu=0, cov=self.u_var * np.eye(self.n),
+            u = pm.MvNormal(name="U",
+                            mu=0, cov=self.u_par['sd']**2 * np.eye(self.n),
                             shape=(self.k, self.n),
-                            testval=np.random.normal(
-                                loc=0, scale=np.sqrt(self.u_var), size=(self.k, self.n))
+                            observed=u,
+                            testval=
+                            0 * np.random.normal(
+                                loc=0, scale=self.u_par['sd'],
+                                size=(self.k, self.n)),
                             )
-            v = pm.MvNormal(name="V", mu=0, cov=self.u_var * self.v_cov,
+            v = pm.MvNormal(name="V",
+                            mu=0, cov=self.v_par['sd']**2 * self.v_cov,
                             shape=(self.k, self.p),
-                            testval=np.random.normal(
-                                loc=0, scale=np.sqrt(self.v_var), size=(self.k, self.p))
+                            observed=v,
+                            testval=
+                            0 * np.random.normal(
+                                loc=0, scale=self.v_par['sd'],
+                                size=(self.k, self.p)),
                             )
-
-            e = pm.Normal(name="e", mu=0, sd=1, shape=(self.n, self.p),
-                          testval=np.random.normal(0, self.eps_sd, size=(self.n, self.p)))
+            e = pm.Normal(name="e",
+                          mu=0, sd=1,
+                          shape=(self.n, self.p),
+                          observed=e,
+                          testval=
+                          0 * np.random.normal(
+                              loc=0, scale=self.eps_sd,
+                              size=(self.n, self.p))
+                          )
 
             # factor transformation, transpose then apply activation func to each column
-            u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_trans))
-            v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_trans))
+            if track_transform:
+                u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_par["transform"]))
+                v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_par["transform"]))
+            else:
+                u_t = _factor_transform(u.T, name=self.u_par["transform"])
+                v_t = _factor_transform(v.T, name=self.v_par["transform"])
 
             # theta
             theta = pm.Deterministic("theta", tensor.dot(u_t, v_t.T) + e)
@@ -65,8 +106,8 @@ class NEFactorModel(object):
 
         self.model = nef_factor
         # initialize gradient and hessian functions
-        self.grad = nef_factor.dlogp()
-        self.hess = nef_factor.d2logp()
+        # self.grad = nef_factor.dlogp()
+        # self.hess = nef_factor.d2logp()
 
 
 # helper functions
@@ -96,7 +137,7 @@ def _nef_family(theta, n, p, observed, family="Gaussian", name="y"):
     """
 
     if family == "Gaussian":
-        mu_par = - theta / 2
+        mu_par = theta
         y = pm.Normal(mu=mu_par, sd=np.ones((n, p)), shape=(n, p),
                       observed=observed, name=name + "_gaussian")
 
