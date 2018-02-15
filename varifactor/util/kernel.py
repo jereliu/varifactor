@@ -147,3 +147,4 @@ class RBF(kernel):
         if check_sigma:
             assert self.sigma2 is not None, 'sigma2 is empty, please run .set_sigma'
         return X, Y
+
