@@ -3,16 +3,16 @@ from collections import namedtuple
 param_model = {
     'y': {'family': 'Poisson'},
     'theta': {'k': 2, 'eps_sd': 0.1},
-    'u': {'sd': 0.1, 'transform': 'identity'},
-    'v': {'sd': 1, 'transform': 'identity', 'cov': None}
+    'u': {'sd': 0.2, 'transform': 'identity'},
+    'v': {'sd': 2, 'transform': 'identity', 'cov': None}
     }
 
 
 param_infer = {
     'chains': 1,
-    'n': 2000,
+    'n': 1000,
     'tune': 1000,
-    'vi_freq': 15,   # how frequent to sample from VI iterations
+    'vi_freq': 50,   # how frequent to sample from VI iterations
     'method': 'NUTS',
     'start': None,
     'setting': {
