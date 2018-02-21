@@ -26,6 +26,8 @@ class NEFactorInference:
         self.model = model.model
         self.n = int(param.n)
         self.chains = int(param.chains)
+        self.tune = int(param.tune)
+        self.vi_freq = int(param.vi_freq)
         self.method = param.method
         self.setting = param.setting
         self.start = param.start
@@ -43,6 +45,10 @@ class NEFactorInference:
             logging.info("no starting value provided! (i.e. param.start = None)")
             logging.info("setting param.start to posterior mode..")
             self.start = pm.find_MAP(model=self.model)
+            logging.info("setting param.start to zero..")
+            for key in self.start.keys():
+                self.start[key] = self.start[key] * 0
+
 
         logging.info('initialization done')
         logging.info('to perform inference, execute .run()')
@@ -62,9 +68,9 @@ class NEFactorInference:
             method_name = method
 
         method_setting = self.setting[method_name]
-        sample = self._run_sampler[method_name](setting=method_setting)
+        result = self._run_sampler[method_name](setting=method_setting)
 
-        return sample
+        return result
 
     def run_metro(self, setting=None):
         logging.info('\n====================')
@@ -75,14 +81,17 @@ class NEFactorInference:
 
         with self.model:
             mc = pm.Metropolis(**setting)
-            sample = pm.sample(step=mc,
+            result = pm.sample(step=mc,
                                draws=self.n, cores=self.chains,
-                               start=self.start, tune=0)
+                               start=self.start, tune=self.tune,
+                               discard_tuned_samples=False)
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        return sample
+        result.method_type = "mc"
+
+        return result
 
     def run_nuts(self, setting=None):
         logging.info('\n====================')
@@ -93,37 +102,43 @@ class NEFactorInference:
 
         with self.model:
             mc = pm.NUTS(**setting)
-            sample = pm.sample(step=mc,
+            result = pm.sample(step=mc,
                                draws=self.n, cores=self.chains,
-                               start=self.start, tune=0)
+                               start=self.start, tune=self.tune,
+                               discard_tuned_samples=False)
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        return sample
+        result.method_type = "mc"
+
+        return result
 
     def run_advi(self, setting=None):
         logging.info('\n====================')
-        logging.info('running Auto Diff VI..')
+        logging.info('running Mean Field VI..')
 
         if setting is None:
             # for compatible purpose, ADVI doesn't have parameters
             setting = self.setting['ADVI']
 
+        # setup vi and tracker
         with self.model:
             vi = pm.ADVI(start=self.start)
 
             tracker = pm.callbacks.Tracker(
-                mean=vi.approx.mean.eval,  # callable that returns mean
-                std=vi.approx.std.eval  # callable that returns std
+                sample=_single_sample,
             )
 
-            sample = vi.fit(n=self.n, callbacks=[tracker])
+            result = vi.fit(n=self.n * self.vi_freq, callbacks=[tracker])
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        return sample, tracker
+        result.sample_tracker = tracker['sample']
+        result.method_type = "vi"
+
+        return result
 
     def run_nfvi(self, setting=None):
         logging.info('\n====================')
@@ -134,12 +149,20 @@ class NEFactorInference:
 
         with self.model:
             vi = pm.NFVI(start=self.start, **setting)
-            sample = vi.fit(n=self.n)
+
+            tracker = pm.callbacks.Tracker(
+                sample=_single_sample
+            )
+
+            result = vi.fit(n=self.n * self.vi_freq, callbacks=[tracker])
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        return sample
+        result.sample_tracker = tracker['sample']
+        result.method_type = "vi"
+
+        return result
 
     def run_opvi(self, setting=None):
         raise NotImplementedError
@@ -147,5 +170,19 @@ class NEFactorInference:
     def run_svgd(self, setting=None):
         raise NotImplementedError
 
+
+
+def _single_sample(approx, _, iter):
+    """
+    callback function used to sample from VI iterations
+    :param approx:
+    :param _:
+    :param iter:
+    :return: a sample (one draw) from target distribution
+    """
+    if iter % 15 == 0:
+        return approx.sample(draws=1)
+    else:
+        pass
 
 
