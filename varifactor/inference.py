@@ -82,7 +82,8 @@ class NEFactorInference:
         with self.model:
             mc = pm.Metropolis(**setting)
             result = pm.sample(step=mc,
-                               draws=self.n, cores=self.chains,
+                               draws=self.n,
+                               chains=self.chains,
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
 
@@ -103,7 +104,8 @@ class NEFactorInference:
         with self.model:
             mc = pm.NUTS(**setting)
             result = pm.sample(step=mc,
-                               draws=self.n, cores=self.chains,
+                               draws=self.n,
+                               chains=self.chains,
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
 
@@ -180,7 +182,7 @@ def _single_sample(approx, _, iter):
     :param iter:
     :return: a sample (one draw) from target distribution
     """
-    if iter % 15 == 0:
+    if iter % 100 == 0:
         return approx.sample(draws=1)
     else:
         pass
