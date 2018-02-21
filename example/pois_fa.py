@@ -1,35 +1,62 @@
 # Poisson factor analysis using pyMC3
 
-from varifactor.simu import data as generate_data
+import numpy as np
+
+from varifactor import simu
 from varifactor.model import NEFactorModel as Model
 from varifactor.inference import NEFactorInference as Infer
-from varifactor.metric import KSD
-from varifactor.util.kernel import rbf
-
+from varifactor.metric.moment import MomentDistance
+from varifactor.metric.kernel import KSD
 
 from varifactor.setting import param_model, param_infer
 
-# 1. Data generation ####
+from varifactor.util.result_handler import get_sample
 
-family = ["Gaussian", "Binomial", "Poisson"][1]
+
+#########################
+# 1. Data generation ####
+#########################
+
+family = ["Gaussian", "Binomial", "Poisson"][2]
 
 N = 100
-P = 15
-K = 5
+P = 10
+K = 2
 
 # generate data
-y_train, u_train, v_train, e_train = generate_data(N, P, K, family=family)
+y_train, u_train, v_train, e_train = \
+    simu.data(N, P, K, family=family, eps_sd=0,
+              uv_scale=[param_model.u['sd'], param_model.v['sd']])
 
-# 2. Model Setup
-nefm_model = Model(y_train, param_model)
+#########################
+# 2. Model Setup     ####
+#########################
+
+# initialize model
+nefm_model = Model(y_train, param_model, e=e_train)
+
+# initialize inference
 nefm_infer = Infer(nefm_model, param_infer)
 
-result = nefm_infer.run()
+#########################
+# 3. Run Inference   ####
+#########################
 
-# # if want to run alternative sampler, pick on of below methods
-# result_mh = nefm_infer.run_metro()
-# result_nu = nefm_infer.run_nuts()
-# result_ad = nefm_infer.run_advi()
-# result_nf = nefm_infer.run_nfvi()
+# run algorithm
+sample = dict()
+for method in ['Metropolis', 'NUTS', 'ADVI']:
+    result = nefm_infer.run(method=method)
+    sample[method] = get_sample(result, "U")
 
+#########################
+# 4. Evaluation      ####
+#########################
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+sns.set_style("darkgrid")
+for method in ['Metropolis', 'NUTS', 'ADVI']:
+    plt.plot(sample[method][:, 0, 0])
+plt.show()
 
