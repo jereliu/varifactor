@@ -41,17 +41,23 @@ class NEFactorInference:
                 'SVGD': self.run_svgd,
             }
 
-        if self.start is None:
-            logging.info("no starting value provided! (i.e. param.start = None)")
-            logging.info("setting param.start to posterior mode..")
-            self.start = pm.find_MAP(model=self.model)
-            logging.info("setting param.start to zero..")
-            for key in self.start.keys():
-                self.start[key] = self.start[key] * 0
+        if isinstance(self.start, str):
+            if self.start is 'MAP':
+                logging.info("setting param.start to MAP..")
+                self.start = pm.find_MAP(model=self.model)
+            elif  self.start is 'zero':
+                logging.info("setting param.start to zero..")
+                self.start = dict()
+                for var in self.model.unobserved_RVs:
+                    self.start[var.name] = var.init_value * 0
+            else:
+                raise ValueError("unrecognized initialization method: self.start=" + self.start)
+        else:
+            logging.info("starting value is hand-specified by user. ")
 
 
         logging.info('initialization done')
-        logging.info('to perform inference, execute .run()')
+        logging.info('to perform inference with a method, execute .run(method=method)')
         logging.info('\n====================')
 
     def run(self, method=None):
