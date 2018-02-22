@@ -25,7 +25,7 @@ class NEFactorModel(object):
 
         # fill in data parameter
         self.family = param.y['family']
-        self.n, self.p = y.shape
+        self.n, self.p = y.shape.eval()
         self.k = param.theta['k']
 
         # fill in observed values

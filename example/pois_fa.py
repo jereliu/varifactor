@@ -19,8 +19,8 @@ from varifactor.util.result_handler import get_sample
 
 family = ["Gaussian", "Binomial", "Poisson"][2]
 
-N = 100
-P = 10
+N = 50
+P = 5
 K = 2
 
 # generate data
