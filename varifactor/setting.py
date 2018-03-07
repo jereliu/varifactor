@@ -12,7 +12,7 @@ param_infer = {
     'chains': 1,
     'n': 1000,
     'tune': 1000,
-    'vi_freq': 20,   # how frequent to sample from VI iterations
+    'vi_freq': 200,   # extra iteration to run for VI
     'method': 'NUTS',
     'start': 'zero', # str (MAP / zero) indicating init method, or a dict of actual init values
     'setting': {
