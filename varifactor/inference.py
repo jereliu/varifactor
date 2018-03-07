@@ -1,3 +1,5 @@
+import datetime, time
+
 import logging
 import pymc3 as pm
 
@@ -90,6 +92,7 @@ class NEFactorInference:
             result = pm.sample(step=mc,
                                draws=self.n,
                                chains=self.chains,
+                               random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
 
@@ -112,6 +115,7 @@ class NEFactorInference:
             result = pm.sample(step=mc,
                                draws=self.n,
                                chains=self.chains,
+                               random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
 
@@ -130,15 +134,18 @@ class NEFactorInference:
             # for compatible purpose, ADVI doesn't have parameters
             setting = self.setting['ADVI']
 
+
         # setup vi and tracker
         with self.model:
-            vi = pm.ADVI(start=self.start)
+            vi = pm.ADVI(start=self.start,
+                         random_seed=_random_seed())
 
             tracker = pm.callbacks.Tracker(
                 sample=_single_sample,
             )
 
-            result = vi.fit(n=self.n * self.vi_freq, callbacks=[tracker])
+            result = vi.fit(n=self.n * self.vi_freq,
+                            callbacks=[tracker])
 
         logging.info('Done!')
         logging.info('\n====================')
@@ -156,7 +163,9 @@ class NEFactorInference:
             setting = self.setting['NFVI']
 
         with self.model:
-            vi = pm.NFVI(start=self.start, **setting)
+            vi = pm.NFVI(start=self.start,
+                         random_seed=_random_seed(),
+                         **setting)
 
             tracker = pm.callbacks.Tracker(
                 sample=_single_sample
@@ -179,7 +188,6 @@ class NEFactorInference:
         raise NotImplementedError
 
 
-
 def _single_sample(approx, _, iter):
     """
     callback function used to sample from VI iterations
@@ -194,3 +202,6 @@ def _single_sample(approx, _, iter):
         pass
 
 
+def _random_seed():
+    t = datetime.datetime.now()
+    return int(time.mktime(t.timetuple()))
