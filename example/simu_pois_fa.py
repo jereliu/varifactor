@@ -1,7 +1,7 @@
 # Poisson factor analysis using pyMC3
 import os
+os.environ["MKL_THREADING_LAYER"] = "GNU"
 
-from memory_profiler import profile
 import multiprocessing as mp
 
 import numpy as np
@@ -19,23 +19,40 @@ from varifactor.util.result_handler import get_sample
 # @profile(stream=fp)
 
 
-def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS']):
+def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
+             res_addr="./result/", task_name=None):
+
+
+    # set up result folder
+    if task_name is None:
+        task_name = "%s_n%d_p%d_k%d" % (family, N, P, K)
+
+    res_addr = res_addr + task_name + "/"
+
+    if not os.path.isdir(res_addr):
+        os.mkdir(res_addr)
 
     for method_name in methods:
-        # set container size for algorithm iterations
-        if method_name is 'ADVI':
-            iter_size = (param_infer.n * param_infer.vi_freq)/100
-        else:
-            iter_size = param_infer.n + param_infer.tune
+        # set up result folder
+        if not os.path.exists(res_addr + method_name):
+            os.mkdir(res_addr + method_name)
+            os.mkdir(res_addr + method_name + "/U")
+            os.mkdir(res_addr + method_name + "/V")
+
+        # # set container size for algorithm iterations
+        # if method_name is 'ADVI':
+        #     iter_size = (param_infer.n * param_infer.vi_freq)/100
+        # else:
+        #     iter_size = param_infer.n + param_infer.tune
 
         # run sampler
         total_iter = n_chain/param_infer.chains
         for iter_num in range(total_iter):
-            U_sample_all = np.zeros((n_chain, iter_size, N, param_model.theta['k']))
-            V_sample_all = np.zeros((n_chain, iter_size, P, param_model.theta['k']))
+            # U_sample_all = np.zeros((n_chain, iter_size, N, param_model.theta['k']))
+            # V_sample_all = np.zeros((n_chain, iter_size, P, param_model.theta['k']))
 
             print("##################################")
-            print("######## Iteration %d/%d #########" % (iter_num, total_iter))
+            print("######## Iteration %d/%d #########" % (iter_num+1, total_iter))
             print("##################################")
             # generate data ----
             y_train, u_train, v_train, e_train = \
@@ -55,11 +72,14 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS']):
             q.close()
             p.join()
 
-            # store result ----
-            U_sample_all[iter_num] = get_sample(result, "U")
-            V_sample_all[iter_num] = get_sample(result, "V")
-            np.save('./result/%s_%s_U' % (method_name, family), U_sample_all)
-            np.save('./result/%s_%s_V' % (method_name, family), V_sample_all)
+            # store result and initial values ----
+            u_sample = \
+                np.concatenate((u_train[np.newaxis, :, :], get_sample(result, "U")))
+            v_sample = \
+                np.concatenate((v_train[np.newaxis, :, :], get_sample(result, "V")))
+
+            np.save(res_addr + method_name + "/U/%d" % (iter_num), u_sample)
+            np.save(res_addr + method_name + "/V/%d" % (iter_num), v_sample)
 
     return None
 
@@ -70,6 +90,8 @@ def run_inference(q, inference, method_name):
 
 
 if __name__ == "__main__":
+    res_path = os.path.dirname(os.path.abspath(__file__)) + "/result/"
+
     #########################
     # 1. Initialize Model  ##
     #########################
@@ -91,4 +113,6 @@ if __name__ == "__main__":
     #########################
     # 2. Run Simulation  ####
     #########################
-    run_simu(nefm_infer, n_chain=5, methods=['ADVI'])
+    run_simu(nefm_infer, n_chain=500,
+             methods=['ADVI', 'Metropolis', 'NUTS'],
+             res_addr=res_path)
