@@ -2,7 +2,7 @@ from collections import namedtuple
 
 param_model = {
     'y': {'family': 'Poisson'},
-    'theta': {'k': 2, 'eps_sd': 0.1},
+    'theta': {'k': 2, 'eps_sd': 0},
     'u': {'sd': 0.2, 'transform': 'identity'},
     'v': {'sd': 2, 'transform': 'identity', 'cov': None}
     }

@@ -47,7 +47,7 @@ class NEFactorInference:
             if self.start is 'MAP':
                 logging.info("setting param.start to MAP..")
                 self.start = pm.find_MAP(model=self.model)
-            elif  self.start is 'zero':
+            elif self.start is 'zero':
                 logging.info("setting param.start to zero..")
                 self.start = dict()
                 for var in self.model.unobserved_RVs:

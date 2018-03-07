@@ -1,3 +1,7 @@
+import os
+
+from tqdm import tqdm
+
 import numpy as np
 
 
@@ -42,3 +46,34 @@ def get_sample(result, varname="U"):
         stat = np.moveaxis(stat, -2, -1)
 
     return stat
+
+
+def get_npy(addr, ext="npy"):
+    """
+    assume address contains npy files with name "%d.npy", %d being an integer
+    assume all file are of the same dimension
+    :param addr:
+    :return:
+    """
+
+    fname_lst = [fname for fname in os.listdir(addr) if "." + ext in fname]
+
+    if ext == "npy":
+        # attempt reading the first file
+        try:
+            sample = np.load(addr + fname_lst[0])
+        except IOError:
+            print("cannot read npy file " + str(fname_lst[0]))
+
+        # extract dimension and build container
+        N, P, K = sample.shape
+        sample_list = np.zeros(shape=[len(fname_lst), N, P, K])
+
+        # file reading in
+        for i in tqdm(range(len(fname_lst))):
+            sample_list[i] = np.load(addr + str(i) + ".npy")
+
+    else:
+        raise ValueError("Unsupported extension %s" % (ext))
+
+    return sample_list
