@@ -118,9 +118,34 @@ class NEFactorModel(object):
 
         self.model = nef_factor
 
-    def eigrad(self, u, native=False):
+    def eigrad_prior(self, eigen, indep=True, par="U"):
         """
-        produce gradient function with respect to U
+        assuming prior distribution is multivariate normal,
+        produce gradient function with respect to eigenvalues
+        :param eigen: eigenvalues
+        :param indep: whether covariance for prior MVN is identity
+        :param par: for which parameter are we calculating the gradient
+        :return: gradient function
+        """
+        eigen = np.reshape(eigen, (len(eigen), 1))
+        sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
+        n = self.n if par == "U" else self.p
+
+        # produce inverse pairwise difference matrix
+        sum2 = eigen ** 2
+        diff_mat = np.sqrt(sum2 + sum2.T - 2 * np.dot(eigen, eigen.T))
+        np.fill_diagonal(diff_mat, 1)  # put 1 on diagonal to avoid division by 0
+        d_inv = 1/diff_mat
+        np.fill_diagonal(d_inv, 0)
+        d_inv_sum = np.sum(d_inv, axis=0)
+
+        # produce final result
+        grad = -0.5/(sd**2) + 0.5 * (n - self.k - 1)/eigen.T + d_inv_sum
+        return grad
+
+    def eigrad_u(self, u, native=False):
+        """
+        produce gradient function with respect to U (very noisy, due to variation in eigenvectors)
         :param u:
         :param native: whether to use build-in pymc3 function dlogp to calculate gradient
         :return:
@@ -147,6 +172,7 @@ class NEFactorModel(object):
 
     def _grad_LU(self, u):
         """
+        compute d_L/d_U
         :param U: a N x K matrix
         :return:
         """
@@ -161,6 +187,7 @@ class NEFactorModel(object):
 
     def _grad_Ud(self, u):
         """
+        compute d_U/d_eig
         :param U: a N x K matrix
         :return:
         """
