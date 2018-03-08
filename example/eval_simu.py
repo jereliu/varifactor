@@ -7,7 +7,7 @@ from tqdm import tqdm
 import numpy as np
 from scipy.stats import norm
 
-from varifactor.util.result_handler import get_npy
+from varifactor.util.result_handler import read_npy
 
 ####################
 # 1. read in file  #
@@ -25,8 +25,8 @@ V = dict()
 
 for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
-    U[method] = get_npy(res_addr + "U/")
-    V[method] = get_npy(res_addr + "V/")
+    U[method] = read_npy(res_addr + "U/")
+    V[method] = read_npy(res_addr + "V/")
 
 
 #####################################

@@ -48,7 +48,22 @@ def get_sample(result, varname="U"):
     return stat
 
 
-def get_npy(addr, ext="npy"):
+# extract eigenvalues from sample
+def get_eigen(sample):
+    # get eigenvalue data (n_chain x n_eigen) for every iteration
+    n_sample, n_iter, P, K = sample.shape
+    eigen_sample_all = np.zeros((n_iter, n_sample, K))
+
+    for iter_id in tqdm(range(1, n_iter, 2)):
+        eigen_sample = \
+            np.array([np.linalg.svd(sample[sample_id, iter_id], compute_uv=False)**2
+                        for sample_id in range(n_sample)])
+        eigen_sample_all[iter_id] = eigen_sample
+
+    return eigen_sample_all
+
+
+def read_npy(addr, ext="npy"):
     """
     assume address contains npy files with name "%d.npy", %d being an integer
     assume all file are of the same dimension
