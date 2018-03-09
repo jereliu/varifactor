@@ -115,6 +115,5 @@ if __name__ == "__main__":
     #########################
     # 2. Run Simulation  ####
     #########################
-    run_simu(nefm_infer, n_chain=1,
-             methods=['NUTS'],
-             res_addr=res_path)
+    run_simu(nefm_infer, n_chain=1000,
+             methods=['ADVI', 'Metropolis', 'NUTS'], res_addr=res_path)

@@ -1,4 +1,5 @@
 import os
+os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -32,13 +33,44 @@ for method in method_list:
 # 2. helper functions
 #####################################
 
+
 # drawn from true distribution (multivariate normal with sd)
-def draw_eigen(N, K, sample_size = int(1e3), sd_true=2):
-    eigen_sample = np.zeros(shape=(sample_size, K))
+def draw_eigen(n, k, sample_size=int(1e3), mean_true=0, sd_true=0.2):
+    eigen_sample = np.zeros(shape=(sample_size, k))
+
     for i in tqdm(range(sample_size)):
-        eigen_sample[i] = \
-            np.linalg.svd(np.random.normal(scale=sd_true, size=(N, K)), compute_uv=False) ** 2
+        X = np.random.normal(loc=mean_true, scale=sd_true, size=(n, k))
+        eigen_sample[i] = np.linalg.svd(X, compute_uv=False) ** 2
+
     return eigen_sample
+
+
+def plot_2dcontour(f=None, data=None):
+    # define grid
+    xmin, xmax = 2, 6
+    ymin, ymax = 2, 6
+
+    xx, yy = np.mgrid[xmin:xmax:100j, ymin:ymax:100j]
+    positions = np.vstack([xx.ravel(), yy.ravel()])
+
+    # if no function, do kernel density estimation based on data
+    if f is None:
+        x = data[:, 0]
+        y = data[:, 1]
+        values = np.vstack([x, y])
+        f = st.gaussian_kde(values)
+        z = np.reshape(f(positions).T, xx.shape)
+    else:
+        z = np.array([f(positions[:, i]) for i in range(positions.shape[1])])
+        z = np.reshape(z, xx.shape)
+        z = z/np.max(z)
+
+    fig = plt.figure()
+    ax = fig.gca()
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+
+    cfset = ax.contourf(xx, yy, z, cmap='Blues')
 
 
 #####################################
@@ -78,7 +110,42 @@ for method in ["Metropolis", "NUTS", "ADVI"]:
 
 plt.ion()
 
+
 ##############################################
 # 4. KSD unit test: type I error and power  ##
 ##############################################
+
+import numpy as np
+import scipy.stats as st
+import theano
+
+import kgof.data as data
+import kgof.density as density
+import kgof.goftest as gof
+
+from varifactor.model import NEFactorModel as Model
+from varifactor.metric.kernel import KSD
+from varifactor.util.kernel import RBF
+from varifactor.setting import param_model
+
+# prepare model
+sample_size = 10000
+n = 100
+p = 15
+k = 2
+mean_true = 0
+sd_true = 0.2
+
+y_placeholder = theano.shared(np.random.normal(size=(n, p)))
+e_placeholder = np.zeros(shape=(n, p))
+
+model = Model(y_placeholder, param_model, e=e_placeholder)
+
+# draw eigenvalues and plot kde contour
+eigen = draw_eigen(n, k, sample_size, mean_true, sd_true)
+
+# plot ideal density
+plot_2dcontour(data=eigen)
+plot_2dcontour(f=model.lik_eig)
+
 
