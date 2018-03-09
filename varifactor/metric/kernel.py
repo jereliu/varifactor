@@ -2,6 +2,8 @@ from __future__ import division
 
 import logging
 
+import numpy as np
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("metric")
 
@@ -21,9 +23,16 @@ class KernelDistance:
 
 
 class KSD(KernelDistance):
-    def __init__(self, model, kernel):
+    def __init__(self, model, kernel, eigen=False):
+        """
+
+        :param model:
+        :param kernel:
+        :param eigen: if test for eigenvalues of random matrix
+        """
         self.model = model.model
         self.kernel = kernel
+        self.grad = model.grad_eig if eigen else model.grad
 
     def stat(self, X):
         """
@@ -37,7 +46,7 @@ class KSD(KernelDistance):
         # logging.info('computing test statistic')
 
         # 1. compute kernel and score
-        S = self.model.grad(X)
+        S = self.grad(X)
         K = kernel.eval(X, X)
 
         # 2. compute score gram and kernel Hessian
@@ -88,17 +97,25 @@ class KSD(KernelDistance):
 
         return p_value, stat, boot_sample
 
+
 if __name__ == "__main__":
+    import os
+    os.environ['MKL_THREADING_LAYER'] = 'GNU'
+
+    from tqdm import tqdm
+
+    import numpy as np
+
     import kgof.data as data
     import kgof.density as density
     import kgof.goftest as gof
 
-    import numpy as np
-
     from varifactor.metric.kernel import KSD
     from varifactor.util.kernel import RBF
 
-    from tqdm import tqdm
+    ##############################################
+    # 1. Unit Test for multivariate Gaussian     #
+    ##############################################
 
     seed = 13
     n = 1000
@@ -107,7 +124,7 @@ if __name__ == "__main__":
     ds = data.DSLaplace(d=d, loc=0, scale=1.0 / np.sqrt(2))
     dat = ds.sample(n, seed=seed + 1)
 
-    p = density.IsotropicNormal(np.zeros(d), 1.0)
+    normal_dist = density.IsotropicNormal(np.zeros(d), 1.0)
 
     class tempmd:
         def __init__(self, p):
@@ -115,7 +132,7 @@ if __name__ == "__main__":
             self.model.grad = p.grad_log
 
     ######################################################################
-    # kernel stein test
+    # kernel stein test, with gaussian distribution
     n_trial = 10
     n_rep = 100
 
@@ -130,7 +147,7 @@ if __name__ == "__main__":
             sigma2 = RBF().set_sigma(X)
             rbf = RBF(sigma2=sigma2)
 
-            ksd = KSD(model=tempmd(p), kernel=rbf)
+            ksd = KSD(model=tempmd(normal_dist), kernel=rbf)
             # ksd_val, ksd_H = ksd.stat(X)
             p_val, ksd_val, _ = ksd.test(X)
             container_rep['ksd'][j] = ksd_val
@@ -195,28 +212,141 @@ if __name__ == "__main__":
     me_opt_result = me_opt.perform_test(dat, op)
     me_opt_result
 
+    #########################################################
+    # 2. Unit Test for eigenvalue of multivariate Gaussian  #
+    #########################################################
+    import os
+    os.environ['MKL_THREADING_LAYER'] = 'GNU'
+
+    from tqdm import tqdm
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    import numpy as np
+    import scipy.stats as st
+    import theano
+
+    from varifactor.model import NEFactorModel as Model
+    from varifactor.metric.kernel import KSD
+    from varifactor.util.kernel import RBF
+    from varifactor.setting import param_model
+
+    def draw_eigen(n, k, sample_size=int(1e3), mean_true=0, sd_true=0.2):
+        eigen_sample = np.zeros(shape=(sample_size, k))
+
+        for i in range(sample_size):
+            X = np.random.normal(loc=mean_true, scale=sd_true, size=(n, k))
+            eigen_sample[i] = np.linalg.svd(X, compute_uv=False) ** 2
+
+        return eigen_sample
 
 
+    def plot_2dcontour(f=None, data=None, title=""):
+        # define grid
+        xmin, xmax = 2, 6
+        ymin, ymax = 2, 6
+
+        xx, yy = np.mgrid[xmin:xmax:100j, ymin:ymax:100j]
+        positions = np.vstack([xx.ravel(), yy.ravel()])
+
+        # if no function, do kernel density estimation based on data
+        if f is None:
+            x = data[:, 0]
+            y = data[:, 1]
+            values = np.vstack([x, y])
+            f = st.gaussian_kde(values)
+            z = np.reshape(f(positions).T, xx.shape)
+        else:
+            z = np.array([f(positions[:, i]) for i in range(positions.shape[1])])
+            z = np.reshape(z, xx.shape)
+            if not np.isnan(np.max(z)):
+                z = z / np.max(z)
+
+        fig = plt.figure()
+        ax = fig.gca()
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        plt.title(title)
+
+        cfset = ax.contourf(xx, yy, z, cmap='Blues')
+
+
+    #########################################################
+    # draw samples from eigenvalue distribution of U prior
+    sample_size = 500
     n = 100
-    p = 20
-    k = 5
-    U = np.random.normal(size=(n,k))
-    V = np.random.normal(size=(p,k))
+    p = 15
+    k = 2
+    mean_true = 0
+    sd_true = 0.2
 
-    def trA(U, V, A=np.exp):
-        return np.sum(A(U.dot(V.T)))
+    # construct model
+    y_placeholder = theano.shared(np.random.normal(size=(n, p)))
+    e_placeholder = np.zeros(shape=(n, p))
 
-    def dtrA(U, V, eps = 1e-6):
-        n, k = U.shape
-        p, k = V.shape
+    model = Model(y_placeholder, param_model, e=e_placeholder)
 
-        dA = np.zeros((n,k))
-        for i in range(n):
-            for j in range(k):
-                U_add = np.zeros((n,k))
-                U_add[i, j] = 1
+    # plot eig density and compare with sample
+    eigen_sample = draw_eigen(n, k, sample_size, mean_true, sd_true)
+    plot_2dcontour(data=eigen_sample, title="sample likelihood")
+    plot_2dcontour(f=model.lik_eig, title="analytical likelihood")
+    plot_2dcontour(f=model.llik_eig, title="analytical log likelihood")
 
-                U_low = U - U_add * eps
-                U_upp = U + U_add * eps
-                dA[i, j] = (trA(U_upp, V) - trA(U_low, V))/(eps * 2)
-        return dA
+    # examine likelihood, log likelihood
+    lik = [model.lik_eig(eigen_sample[i]) for i in range(eigen_sample.shape[0])]
+    llik = [model.llik_eig(eigen_sample[i]) for i in range(eigen_sample.shape[0])]
+
+    assert np.sqrt(np.mean((np.log(lik) - llik)**2)) < 1e-10
+
+    # check if derivative is correctly implemented
+    grad_native = model.grad_eig(eigen_sample, native=True)
+    grad_autogd = model.grad_eig(eigen_sample, native=False)
+
+    assert np.sqrt(np.mean((grad_native - grad_autogd)**2)) < 1e-10
+
+    #########################################################
+    # construct KSD test and compute distance, single test run
+
+    sigma2 = RBF().set_sigma(eigen_sample)
+    rbf = RBF(sigma2=sigma2)
+
+    ksd = KSD(model=model, kernel=rbf, eigen=True)
+    p_val, ksd_val, _ = ksd.test(eigen_sample)
+
+    #########################################################
+    # examine power and Type I error of the test, mean-shift alternative
+
+    n_trial = 10
+    n_rep = 100
+
+    container = {'ksd': np.zeros(n_trial),
+                 'pval': np.zeros(n_trial)}
+    for i in range(n_trial):
+        container_rep = {'ksd': np.zeros(n_rep),
+                         'pval': np.zeros(n_rep)}
+        for j in tqdm(range(n_rep)):
+            mean_true = 0.1 * i/n_trial
+            X = draw_eigen(n, k, sample_size, mean_true, sd_true)
+
+            sigma2 = RBF().set_sigma(X)
+            rbf = RBF(sigma2=sigma2)
+
+            ksd = KSD(model=model, kernel=rbf, eigen=True)
+            # ksd_val, ksd_H = ksd.stat(X)
+            p_val, ksd_val, _ = ksd.test(X)
+            container_rep['ksd'][j] = ksd_val
+            container_rep['pval'][j] = p_val
+
+        container['ksd'][i] = np.mean(container_rep['ksd'])
+        container['pval'][i] = np.mean(container_rep['pval'] < 0.05)
+
+
+
+    # 1. debug autograd - pass
+    # 2. check density (plot) - pass
+    # 3. check log density
+    # 4. check derivative of log density - pass
+    # 2. check distribution matchup - pass
+
+    model.lik_eig(X[0])
+    model.llik_eig(X[0])
