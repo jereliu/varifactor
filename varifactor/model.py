@@ -1,7 +1,12 @@
+from __future__ import division
 import logging
+
 import numpy as np
-import pymc3 as pm
+import autograd
+import autograd.numpy as atnp
+
 import theano.tensor as tensor
+import pymc3 as pm
 
 
 # Set up logging.
@@ -118,29 +123,95 @@ class NEFactorModel(object):
 
         self.model = nef_factor
 
-    def eigrad_prior(self, eigen, indep=True, par="U"):
+    def lik_eig(self, eigen, par="U"):
         """
-        assuming prior distribution is multivariate normal,
-        produce gradient function with respect to eigenvalues
-        :param eigen: eigenvalues
-        :param indep: whether covariance for prior MVN is identity
-        :param par: for which parameter are we calculating the gradient
-        :return: gradient function
+        unnormalized likelihood
+        :param eigen: a 1 x d numpy array of input
+        :param par:
+        :return:
         """
-        eigen = np.reshape(eigen, (len(eigen), 1))
         sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
         n = self.n if par == "U" else self.p
+        k = self.k
 
-        # produce inverse pairwise difference matrix
-        sum2 = eigen ** 2
-        diff_mat = np.sqrt(sum2 + sum2.T - 2 * np.dot(eigen, eigen.T))
-        np.fill_diagonal(diff_mat, 1)  # put 1 on diagonal to avoid division by 0
-        d_inv = 1/diff_mat
-        np.fill_diagonal(d_inv, 0)
-        d_inv_sum = np.sum(d_inv, axis=0)
+        if not all(eigen[i] > eigen[i + 1] for i in range(len(eigen) - 1)):
+            # check if eigen is ordered, if not return 0:
+            return 0
+        else:
+            diff = eigen.reshape((k, 1)) - eigen.T
 
-        # produce final result
-        grad = -0.5/(sd**2) + 0.5 * (n - self.k - 1)/eigen.T + d_inv_sum
+            lik_eig = np.prod(np.exp(-0.5/(sd**2) * np.sum(eigen))) * \
+                        np.prod(eigen)**((n - k - 1)/2) * \
+                        np.prod(diff[diff > 0])
+
+        return lik_eig
+
+    def llik_eig(self, eigen, par="U"):
+        """
+        log likelihood
+        :param eigen: a 1 x d numpy array of input
+        :param par:
+        :return:
+        """
+        sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
+        n = self.n if par == "U" else self.p
+        k = self.k
+
+        if not all(eigen[i] > eigen[i + 1] for i in range(len(eigen) - 1)):
+            # check if eigen is ordered, if not return NA:
+            return np.nan
+        else:
+            diff = (eigen.reshape(k, 1) - eigen)[np.triu_indices(k, 1)]
+            log_diff = atnp.sum(atnp.log(diff))
+
+            log_lik = -0.5 / (sd ** 2) * atnp.sum(eigen) + \
+                      0.5 * (n - k - 1) * atnp.sum(atnp.log(eigen)) + log_diff
+
+        return log_lik
+
+    def grad_eig(self, eigen, par="U", indep=True, cov=None, native=False):
+        """
+        assuming prior distribution is multivariate normal,
+        produce gradient function with respect to each of the n eigenvalues
+        supplied by eigen
+
+        :param eigen: eigenvalues, a sample_size x k matrix
+        :param indep: whether covariance for prior MVN is identity
+        :param par: for which parameter are we calculating the gradient
+        :param native: whether do explicit calculation, or use autograd (slower)
+        :return: an n x d numpy array of gradients.
+        """
+        eigen = eigen.reshape((int(eigen.size/self.k), self.k))
+
+        if native:
+            # explicit calculation
+
+            # 0. prepare meta data
+            sample_size, k = eigen.shape
+            sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
+            n = self.n if par == "U" else self.p
+
+            # 1. Calculate each component:
+            # 1.1 sum of inverse pairwise difference matrix
+            # (first compute difference, then take absolute, then inverse & row sum)
+            diff_mat = np.apply_along_axis(
+                lambda eig: eig.reshape(k, 1) - eig, 1, eigen)
+            diff_inv = np.divide(1, diff_mat, where=(diff_mat != 0)) * \
+                       (diff_mat != 0)  # extra protection for devision by zero error
+            diff_inv_sum = np.sum(diff_inv, axis=-1)
+
+            if indep:
+                # produce final result
+                grad = -0.5/(sd**2) + 0.5 * (n - self.k - 1)/eigen + diff_inv_sum
+            else:
+                # need covariance structure
+                if cov is None:
+                    raise ValueError("need to supply covariance structure for non indep prior")
+                raise NotImplementedError
+        else:
+            g = autograd.elementwise_grad(self.llik_eig)
+            grad = np.array([g(eigen[i, :]) for i in range(eigen.shape[0])])
+
         return grad
 
     def eigrad_u(self, u, native=False):
