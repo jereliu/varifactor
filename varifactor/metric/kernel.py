@@ -63,7 +63,7 @@ class KSD(KernelDistance):
             B += K_grad_x * S_d
             C += (K_grad_y.T * S_d).T
 
-        H = (K * S_gram + B + C + K_hess) / D # standardize by dimension
+        H = (K * S_gram + B + C + K_hess) / D**2 # standardize by dimension
         # logging.info('computation done')
         # logging.info('\n====================')
 
@@ -241,10 +241,10 @@ if __name__ == "__main__":
         return eigen_sample
 
 
-    def plot_2dcontour(f=None, data=None, title=""):
+    def plot_2dcontour(f=None, data=None, title="", xlim=(1, 3.5), ylim=(1, 2.5)):
         # define grid
-        xmin, xmax = 2, 6
-        ymin, ymax = 2, 6
+        xmin, xmax = xlim
+        ymin, ymax = ylim
 
         xx, yy = np.mgrid[xmin:xmax:100j, ymin:ymax:100j]
         positions = np.vstack([xx.ravel(), yy.ravel()])
@@ -272,7 +272,7 @@ if __name__ == "__main__":
 
 
     #########################################################
-    # draw samples from eigenvalue distribution of U prior
+    # 2.1 draw samples from eigenvalue distribution of U prior
     sample_size = 500
     n = 100
     p = 15
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     plot_2dcontour(f=model.lik_eig, title="analytical likelihood")
     plot_2dcontour(f=model.llik_eig, title="analytical log likelihood")
 
-    # examine likelihood, log likelihood
+    # examine if likelihood / log likelihood implementation are correct
     lik = [model.lik_eig(eigen_sample[i]) for i in range(eigen_sample.shape[0])]
     llik = [model.llik_eig(eigen_sample[i]) for i in range(eigen_sample.shape[0])]
 
@@ -316,16 +316,20 @@ if __name__ == "__main__":
     #########################################################
     # examine power and Type I error of the test, mean-shift alternative
 
-    n_trial = 10
+    sample_size = 500
+    n_trial = 5
     n_rep = 100
+
+    mean_range = np.linspace(0, 1, num=n_trial)
 
     container = {'ksd': np.zeros(n_trial),
                  'pval': np.zeros(n_trial)}
     for i in range(n_trial):
         container_rep = {'ksd': np.zeros(n_rep),
                          'pval': np.zeros(n_rep)}
+        print("Iteration %d/%d" % (i+1, n_trial))
         for j in tqdm(range(n_rep)):
-            mean_true = 0.1 * i/n_trial
+            mean_true = mean_range[i]
             X = draw_eigen(n, k, sample_size, mean_true, sd_true)
 
             sigma2 = RBF().set_sigma(X)
@@ -340,13 +344,3 @@ if __name__ == "__main__":
         container['ksd'][i] = np.mean(container_rep['ksd'])
         container['pval'][i] = np.mean(container_rep['pval'] < 0.05)
 
-
-
-    # 1. debug autograd - pass
-    # 2. check density (plot) - pass
-    # 3. check log density
-    # 4. check derivative of log density - pass
-    # 2. check distribution matchup - pass
-
-    model.lik_eig(X[0])
-    model.llik_eig(X[0])

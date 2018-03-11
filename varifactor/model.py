@@ -123,15 +123,14 @@ class NEFactorModel(object):
 
         self.model = nef_factor
 
-    def lik_eig(self, eigen, par="U"):
+    def lik_eig(self, eigen):
         """
-        unnormalized likelihood
+        unnormalized likelihood, wrt the stacked parameter matrix S = [U^T, V^T]^T
         :param eigen: a 1 x d numpy array of input
-        :param par:
         :return:
         """
-        sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
-        n = self.n if par == "U" else self.p
+        sd = 1
+        n = self.n + self.p
         k = self.k
 
         if not all(eigen[i] > eigen[i + 1] for i in range(len(eigen) - 1)):
@@ -146,15 +145,14 @@ class NEFactorModel(object):
 
         return lik_eig
 
-    def llik_eig(self, eigen, par="U"):
+    def llik_eig(self, eigen):
         """
-        log likelihood
+        log likelihood, wrt the stacked parameter matrix S = [U^T, V^T]^T
         :param eigen: a 1 x d numpy array of input
-        :param par:
         :return:
         """
-        sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
-        n = self.n if par == "U" else self.p
+        sd = 1
+        n = self.n + self.p
         k = self.k
 
         if not all(eigen[i] > eigen[i + 1] for i in range(len(eigen) - 1)):
@@ -169,40 +167,42 @@ class NEFactorModel(object):
 
         return log_lik
 
-    def grad_eig(self, eigen, par="U", indep=True, cov=None, native=False):
+    def grad_eig(self, eigen, indep=True, cov=None, native=True):
         """
         assuming prior distribution is multivariate normal,
         produce gradient function with respect to each of the n eigenvalues
-        supplied by eigen
+        of the stacked parameter matrix S = [U^T, V^T]^T
 
         :param eigen: eigenvalues, a sample_size x k matrix
         :param indep: whether covariance for prior MVN is identity
-        :param par: for which parameter are we calculating the gradient
         :param native: whether do explicit calculation, or use autograd (slower)
         :return: an n x d numpy array of gradients.
         """
-        eigen = eigen.reshape((int(eigen.size/self.k), self.k))
+        sd = 1
+        n = self.n + self.p
+        k = self.k
+        sample_size = int(eigen.size/k)
+
+        eigen = eigen.reshape((sample_size, k))
 
         if native:
             # explicit calculation
 
             # 0. prepare meta data
-            sample_size, k = eigen.shape
-            sd = self.u_par['sd'] if par == "U" else self.v_par['sd']
-            n = self.n if par == "U" else self.p
 
             # 1. Calculate each component:
             # 1.1 sum of inverse pairwise difference matrix
             # (first compute difference, then take absolute, then inverse & row sum)
             diff_mat = np.apply_along_axis(
                 lambda eig: eig.reshape(k, 1) - eig, 1, eigen)
-            diff_inv = np.divide(1, diff_mat, where=(diff_mat != 0)) * \
+            diff_inv = \
+                np.divide(1, diff_mat, where=(diff_mat != 0)) * \
                        (diff_mat != 0)  # extra protection for devision by zero error
             diff_inv_sum = np.sum(diff_inv, axis=-1)
 
             if indep:
                 # produce final result
-                grad = -0.5/(sd**2) + 0.5 * (n - self.k - 1)/eigen + diff_inv_sum
+                grad = -0.5/(sd**2) + 0.5 * (n - k - 1)/eigen + diff_inv_sum
             else:
                 # need covariance structure
                 if cov is None:
@@ -210,7 +210,7 @@ class NEFactorModel(object):
                 raise NotImplementedError
         else:
             g = autograd.elementwise_grad(self.llik_eig)
-            grad = np.array([g(eigen[i, :]) for i in range(eigen.shape[0])])
+            grad = np.array([g(eigen[i, :]) for i in range(sample_size)])
 
         return grad
 

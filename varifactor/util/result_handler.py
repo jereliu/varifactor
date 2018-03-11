@@ -54,7 +54,7 @@ def get_eigen(sample):
     n_sample, n_iter, P, K = sample.shape
     eigen_sample_all = np.zeros((n_iter, n_sample, K))
 
-    for iter_id in tqdm(range(1, n_iter, 2)):
+    for iter_id in tqdm(range(1, n_iter)):
         eigen_sample = \
             np.array([np.linalg.svd(sample[sample_id, iter_id], compute_uv=False)**2
                         for sample_id in range(n_sample)])
