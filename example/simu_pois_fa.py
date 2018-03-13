@@ -38,6 +38,7 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
             os.mkdir(res_addr + method_name)
             os.mkdir(res_addr + method_name + "/U")
             os.mkdir(res_addr + method_name + "/V")
+            os.mkdir(res_addr + method_name + "/Y")
 
         # # set container size for algorithm iterations
         # if method_name is 'ADVI':
@@ -56,7 +57,7 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
             print("##################################")
             # generate data ----
             y_train, u_train, v_train, e_train = \
-                simu.data(N, P, K, family=family, eps_sd=0,
+                simu.data(N, P, K, family=family, eps_sd=param_model.theta['eps_sd'],
                           uv_scale=[param_model.u['sd'], param_model.v['sd']])
             y_shared.set_value(y_train)  # update model data
 
@@ -80,6 +81,7 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
 
             np.save(res_addr + method_name + "/U/%d" % (iter_num), u_sample)
             np.save(res_addr + method_name + "/V/%d" % (iter_num), v_sample)
+            np.save(res_addr + method_name + "/Y/%d" % (iter_num), y_train)
 
     return None
 
@@ -103,7 +105,7 @@ if __name__ == "__main__":
     K = 2
 
     y_train, u_train, v_train, e_train = \
-        simu.data(N, P, K, family=family, eps_sd=0,
+        simu.data(N, P, K, family=family, eps_sd=param_model.theta['eps_sd'],
                   uv_scale=[param_model.u['sd'], param_model.v['sd']])
 
     y_shared = theano.shared(y_train)
@@ -113,6 +115,5 @@ if __name__ == "__main__":
     #########################
     # 2. Run Simulation  ####
     #########################
-    run_simu(nefm_infer, n_chain=500,
-             methods=['ADVI', 'Metropolis', 'NUTS'],
-             res_addr=res_path)
+    run_simu(nefm_infer, n_chain=1000,
+             methods=['ADVI', 'Metropolis', 'NUTS'], res_addr=res_path)

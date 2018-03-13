@@ -311,12 +311,14 @@ for method in method_list:
 pk.dump(ksd_iter, open("./result/ksd.pkl", "wr"))
 ksd_iter = pk.load(open("./result/ksd.pkl", "r"))
 
-sns.set_style('darkgrid')
-for method in method_list:
-    plt.plot(ksd_iter[method][:, 0])
-plt.ylim((0, 10))
 
+col_list = ["#DC3522", "#11111D", "#0B486D", "#D35400"]
 sns.set_style('darkgrid')
-for method in method_list:
-    plt.plot(ksd_iter[method][:, 2])
-plt.ylim((0, 10))
+for method_id in range(len(method_list)):
+    method = method_list[method_id]
+    plt.plot(ksd_iter[method][:, 2], c=col_list[method_id])
+    plt.fill_between(x=np.arange(ksd_iter[method].shape[0]),
+                     y1=ksd_iter[method][:, 1],
+                     y2=ksd_iter[method][:, 3],
+                     color=col_list[method_id], alpha=0.5)
+plt.ylim((0, 4))
