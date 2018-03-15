@@ -21,6 +21,7 @@
     - [ ] **Example**: inference with lognormal outcome
 
 * Refactor
+    - [ ] Redefine Model so U, V ~ standard Matrix Normal
     - [ ] Visualization module with option for run-time smoothing.
     - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/DistMetric)
 
