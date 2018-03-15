@@ -1,4 +1,8 @@
+from __future__ import division
+
 import datetime, time
+
+import numpy as np
 
 import logging
 import pymc3 as pm
@@ -26,20 +30,20 @@ class NEFactorInference:
         logging.info('initializing inference algorithms')
 
         self.model = model.model
+        self.n_param = np.sum([RV.init_value.size for RV in self.model.unobserved_RVs])
         self.n = int(param.n)
         self.chains = int(param.chains)
         self.tune = int(param.tune)
-        self.vi_freq = int(param.vi_freq)
         self.method = param.method
         self.setting = param.setting
         self.start = param.start
         self._run_sampler = \
             {
                 'Metropolis': self.run_metro,
+                'Slice': self.run_slice,
                 'NUTS': self.run_nuts,
                 'ADVI': self.run_advi,
                 'NFVI': self.run_nfvi,
-                'OPVI': self.run_opvi,
                 'SVGD': self.run_svgd,
             }
 
@@ -81,116 +85,276 @@ class NEFactorInference:
         return result
 
     def run_metro(self, setting=None):
+        """
+            Metropolis-Hasting
+
+        :param setting:
+        :return: class:pymc3.backends.base.MultiTrace
+        """
+
         logging.info('\n====================')
         logging.info('running Metropolis-Hasting..')
 
+        # prepare setting
         if setting is None:
-            setting = self.setting['Metropolis']
+            setting = self.setting['Metropolis'].copy()
 
+        # sampling
         with self.model:
             mc = pm.Metropolis(**setting)
+
+            t0 = time.time()
             result = pm.sample(step=mc,
                                draws=self.n,
                                chains=self.chains,
                                random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
+            t1 = time.time()
 
         logging.info('Done!')
         logging.info('\n====================')
 
+        # aftermath: add signature & record time
         result.method_type = "mc"
+        result.iter_time = (t1 - t0)/(self.n + self.tune)
+
+        return result
+
+    def run_slice(self, setting=None):
+        """
+            Elliptical Slice Sampling
+
+        Use slice sampler for U, V and NUTS (with default setting) for the rest
+
+        :param setting:
+        :return: class:pymc3.backends.base.MultiTrace
+        """
+
+        logging.info('\n====================')
+        logging.info('running Elliptical Slice Sampling..')
+
+        # TODO: adaptive covariance structure for prior
+        if setting is None:
+            setting = self.setting['Slice'].copy()
+
+        with self.model:
+            logging.warning('Setting Prior Covariance to Identity..')
+            prior_cov = np.eye(self.n_param)
+
+            mc = pm.EllipticalSlice(prior_cov=prior_cov)  # no hyper-parameters
+
+            t0 = time.time()
+            result = pm.sample(step=mc,
+                               draws=self.n,
+                               chains=self.chains,
+                               random_seed=_random_seed(),
+                               start=self.start, tune=self.tune,
+                               discard_tuned_samples=False)
+            t1 = time.time()
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        # aftermath: add signature & record time
+        result.method_type = "mc"
+        result.iter_time = (t1 - t0)/(self.n + self.tune)
 
         return result
 
     def run_nuts(self, setting=None):
+        """
+            No-U-Turn Sampler
+
+        :param setting:
+        :return: class:pymc3.backends.base.MultiTrace
+        """
         logging.info('\n====================')
         logging.info('running NUTS..')
 
+        # prepare setting
         if setting is None:
-            setting = self.setting['NUTS']
+            setting = self.setting['NUTS'].copy()
 
+        # sampling
         with self.model:
             mc = pm.NUTS(**setting)
+
+            t0 = time.time()
             result = pm.sample(step=mc,
                                draws=self.n,
                                chains=self.chains,
                                random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
                                discard_tuned_samples=False)
+            t1 = time.time()
 
         logging.info('Done!')
         logging.info('\n====================')
 
+        # aftermath: add signature & record time
         result.method_type = "mc"
+        result.iter_time = (t1 - t0)/(self.n + self.tune)
 
         return result
 
-    def run_advi(self, setting=None):
+    def run_advi(self, setting=None, track=True):
+        """
+            Mean-field Variational Inference
+
+        :param setting:
+        :param track: whether collect algorithm samples *during* optimization (i.e. add _single_sample to callback)
+        :return: class:pymc3.Approximation
+        """
+
         logging.info('\n====================')
         logging.info('running Mean Field VI..')
 
+        # prepare setting
         if setting is None:
             # for compatible purpose, ADVI doesn't have parameters
-            setting = self.setting['ADVI']
+            setting = self.setting['ADVI'].copy()
+            vi_freq = setting['vi_freq']
+            setting.pop('vi_freq')
 
-
-        # setup vi and tracker
+        # sampling
         with self.model:
             vi = pm.ADVI(start=self.start,
                          random_seed=_random_seed())
 
-            tracker = pm.callbacks.Tracker(
-                sample=_single_sample,
-            )
+            if track:
+                tracker = [pm.callbacks.Tracker(
+                    sample=_single_sample,
+                )]
+            else:
+                tracker = None
 
-            result = vi.fit(n=self.n * self.vi_freq,
-                            callbacks=[tracker])
+            t0 = time.time()
+            result = vi.fit(n=self.n * vi_freq,
+                            callbacks=tracker)
+            t1 = time.time()
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        result.sample_tracker = tracker['sample']
+        # extract result
+        if track:
+            result.sample_tracker = tracker['sample']
+        else:
+            result.sample_tracker = \
+                result.sample(draws=self.n * vi_freq/100)
+
+        # aftermath: add signature & record time
         result.method_type = "vi"
+        result.iter_time = (t1 - t0)/(self.n * vi_freq)
 
         return result
 
-    def run_nfvi(self, setting=None):
+    def run_nfvi(self, setting=None, track=True):
+        """
+            Variational Inference with Normalizing Flow
+
+        :param setting:
+        :param track: whether collect algorithm samples *during* optimization (i.e. add _single_sample to callback)
+        :return: class:pymc3.Approximation
+        """
+
         logging.info('\n====================')
-        logging.info('running Norm Flow VI..')
+        logging.info('running Normalizing Flow VI..')
 
+        # prepare setting
         if setting is None:
-            setting = self.setting['NFVI']
+            setting = self.setting['NFVI'].copy()
+            vi_freq = setting['vi_freq']
+            setting.pop('vi_freq')
 
+        # sampling
         with self.model:
             vi = pm.NFVI(start=self.start,
                          random_seed=_random_seed(),
                          **setting)
 
-            tracker = pm.callbacks.Tracker(
-                sample=_single_sample
-            )
+            if track:
+                tracker = [pm.callbacks.Tracker(sample=_single_sample,)]
+            else:
+                tracker = None
 
-            result = vi.fit(n=self.n * self.vi_freq, callbacks=[tracker])
+            t0 = time.time()
+            result = vi.fit(n=self.n * vi_freq, callbacks=tracker)
+            t1 = time.time()
 
         logging.info('Done!')
         logging.info('\n====================')
 
-        result.sample_tracker = tracker['sample']
+        # extract result
+        if track:
+            result.sample_tracker = tracker['sample']
+        else:
+            result.sample_tracker = \
+                result.sample(draws=self.n * vi_freq/100)
+
+        # aftermath: add signature & record time
         result.method_type = "vi"
+        result.iter_time = (t1 - t0)/(self.n * vi_freq)
 
         return result
 
-    def run_opvi(self, setting=None):
-        raise NotImplementedError
+    def run_svgd(self, setting=None, track=True):
+        """
+            Stein Variational Gradient Descent
 
-    def run_svgd(self, setting=None):
-        raise NotImplementedError
+        :param setting:
+        :param track: whether collect algorithm samples *during* optimization (i.e. add _single_sample to callback)
+        :return: class:pymc3.Approximation
+        """
+
+        logging.info('\n====================')
+        logging.info('running Stein Variational GD..')
+
+        # prepare setting
+        if setting is None:
+            setting = self.setting['SVGD'].copy()
+            vi_freq = setting['vi_freq']
+            setting.pop('vi_freq')
+
+        # sampling
+        with self.model:
+            vi = pm.SVGD(start=self.start,
+                         random_seed=_random_seed(),
+                         **setting)
+
+            if track:
+                tracker = [
+                    pm.callbacks.Tracker(sample=_single_sample,)
+                ]
+            else:
+                tracker = None
+
+            t0 = time.time()
+            result = vi.fit(n=self.n * vi_freq, callbacks=tracker)
+            t1 = time.time()
+
+        logging.info('Done!')
+        logging.info('\n====================')
+
+        # extract result
+        if track:
+            result.sample_tracker = tracker['sample']
+        else:
+            result.sample_tracker = \
+                result.sample(draws=self.n * vi_freq/100)
+
+        # aftermath: add signature & record time
+        result.method_type = "vi"
+        result.iter_time = (t1 - t0)/(self.n * vi_freq)
+
+        return result
 
 
 def _single_sample(approx, _, iter):
     """
     callback function used to sample from VI iterations
+
     :param approx:
     :param _:
     :param iter:
