@@ -109,7 +109,7 @@ if __name__ == "__main__":
                   uv_scale=[param_model.u['sd'], param_model.v['sd']])
 
     y_shared = theano.shared(y_train)
-    nefm_model = Model(y_shared, param_model, e=e_train)
+    nefm_model = Model(y_train, param_model, e=e_train)
     nefm_infer = Infer(nefm_model, param_infer)
 
     #########################

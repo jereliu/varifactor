@@ -1,6 +1,7 @@
 # Poisson factor analysis using pyMC3
 
 import numpy as np
+import theano as tt
 
 from varifactor import simu
 from varifactor.model import NEFactorModel as Model
@@ -27,6 +28,8 @@ K = 2
 y_train, u_train, v_train, e_train = \
     simu.data(N, P, K, family=family, eps_sd=0,
               uv_scale=[param_model.u['sd'], param_model.v['sd']])
+
+y_train = tt.shared(y_train)
 
 #########################
 # 2. Model Setup     ####

@@ -19,7 +19,7 @@ class NEFactorModel(object):
                  u=None, v=None, e=None, track_transform=False):
         """
 
-        :param y:
+        :param y: a theano.tensor.sharedvar.TensorSharedVariable object, created using theano.shared(npy_array)
         :param param:
         :param u: observed value of u, if None then u is treated as an unobserved variable
         :param v: observed value of v, if None then v is treated as an unobserved variable
