@@ -7,8 +7,11 @@ import numpy as np
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("metric")
 
+# TODO: inhere from master class: Metric
+# TODO: add MMD
 
-class KernelDistance:
+
+class KernelMetric:
     def __init__(self, model, kernel):
         self.model = model.model
         self.kernel = kernel
@@ -22,7 +25,7 @@ class KernelDistance:
 # KSD
 
 
-class KSD(KernelDistance):
+class KSD(KernelMetric):
     def __init__(self, model, kernel, eigen=False):
         """
 
@@ -229,7 +232,7 @@ if __name__ == "__main__":
     from varifactor.model import NEFactorModel as Model
     from varifactor.metric.kernel import KSD
     from varifactor.util.kernel import RBF
-    from varifactor.setting import param_model
+    from varifactor.util.setting import param_model
 
     def draw_eigen(n, k, sample_size=int(1e3), mean_true=0, sd_true=0.2):
         eigen_sample = np.zeros(shape=(sample_size, k))

@@ -8,8 +8,9 @@ from numpy.linalg import inv
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("metric")
 
+# TODO: inhere from master class: Metric
 
-class MomentDistance:
+class MomentMetric:
     def __init__(self, model, chain_thres=50):
         """
         Computes distance to true mean and variance for Gaussian NEF model with
