@@ -41,7 +41,7 @@ nefm_model = Model(y_train, param_model, e=e_train)
 nefm_infer = Infer(nefm_model, param_infer)
 
 # run method of choice
-method_name = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"][0]
+method_name = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"][1]
 track_vi_during_opt = False
 
 if method_name == "Metropolis":

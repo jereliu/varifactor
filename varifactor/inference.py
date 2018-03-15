@@ -30,7 +30,6 @@ class NEFactorInference:
         logging.info('initializing inference algorithms')
 
         self.model = model.model
-        self.n_param = np.sum([RV.init_value.size for RV in self.model.unobserved_RVs])
         self.n = int(param.n)
         self.chains = int(param.chains)
         self.tune = int(param.tune)
@@ -68,7 +67,7 @@ class NEFactorInference:
 
     def run(self, method=None):
         """
-                wrapper function that runs algorithm specified by self.method
+            wrapper function that runs algorithm specified by self.method
 
         :param method: method of choice, if none then use default value self.method
         :return:
@@ -115,7 +114,7 @@ class NEFactorInference:
         logging.info('Done!')
         logging.info('\n====================')
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
         result.iter_time = (t1 - t0)/(self.n + self.tune)
 
@@ -138,14 +137,30 @@ class NEFactorInference:
         if setting is None:
             setting = self.setting['Slice'].copy()
 
-        with self.model:
+        with self.model as nef_model:
+            # configure covariance matrix
+            # TODO: allow non-identity covariance structure
             logging.warning('Setting Prior Covariance to Identity..')
-            prior_cov = np.eye(self.n_param)
+            v_var = nef_model["V"].distribution.variance.eval()
+            u_diag = np.ones(nef_model["U"].init_value.size)
+            v_diag = np.ones(nef_model["V"].init_value.size) * v_var
+            prior_cov = np.diag(np.concatenate((u_diag, v_diag)))
 
-            mc = pm.EllipticalSlice(prior_cov=prior_cov)  # no hyper-parameters
+            # setup sampler
+            var_set_uv = [nef_model["U"], nef_model["V"]]
+            mc_uv = pm.EllipticalSlice(var_set_uv, prior_cov=prior_cov)  # no hyper-parameters
+            mc_set = [mc_uv]
 
+            if len(nef_model.unobserved_RVs) > 2:
+                # if there are other parameters, sample those using NUTS
+                var_set_other = \
+                    [RV for RV in nef_model.unobserved_RVs if RV.name not in ["U", "V"]]
+                mc_other = pm.NUTS(var_set_other)
+                mc_set = [mc_uv, mc_other]
+
+            # sampling
             t0 = time.time()
-            result = pm.sample(step=mc,
+            result = pm.sample(step=mc_set,
                                draws=self.n,
                                chains=self.chains,
                                random_seed=_random_seed(),
@@ -156,7 +171,7 @@ class NEFactorInference:
         logging.info('Done!')
         logging.info('\n====================')
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
         result.iter_time = (t1 - t0)/(self.n + self.tune)
 
@@ -192,7 +207,7 @@ class NEFactorInference:
         logging.info('Done!')
         logging.info('\n====================')
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
         result.iter_time = (t1 - t0)/(self.n + self.tune)
 
@@ -242,9 +257,9 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=self.n * vi_freq/100)
+                result.sample(draws=int(self.n * vi_freq/100))
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
         result.iter_time = (t1 - t0)/(self.n * vi_freq)
 
@@ -291,9 +306,9 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=self.n * vi_freq/100)
+                result.sample(draws=int(self.n * vi_freq/100))
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
         result.iter_time = (t1 - t0)/(self.n * vi_freq)
 
@@ -342,9 +357,9 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=self.n * vi_freq/100)
+                result.sample(draws=int(self.n * vi_freq/100))
 
-        # aftermath: add signature & record time
+        # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
         result.iter_time = (t1 - t0)/(self.n * vi_freq)
 
@@ -354,9 +369,10 @@ class NEFactorInference:
 def _single_sample(approx, _, iter):
     """
     callback function used to sample from VI iterations
+    format follows specification in pymc3.variational.inference.py/_iterate_with_loss
 
     :param approx:
-    :param _:
+    :param _: score
     :param iter:
     :return: a sample (one draw) from target distribution
     """
