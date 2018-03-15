@@ -81,8 +81,16 @@ def read_npy(addr, ext="npy"):
             print("cannot read npy file " + str(fname_lst[0]))
 
         # extract dimension and build container
-        N, P, K = sample.shape
-        sample_list = np.zeros(shape=[len(fname_lst), N, P, K])
+        if len(sample.shape) == 2:
+            # if sample is for a observation, then it has 2 dimensions: dim_1, dim_2
+            dim_1, dim_2 = sample.shape
+            sample_list = np.zeros(shape=[len(fname_lst), dim_1, dim_2])
+        elif len(sample.shape) == 3:
+            # if sample is for a parameter, then it has 3 dimensions: n_sample, dim_1, dim_2
+            n_sample, dim_1, dim_2 = sample.shape
+            sample_list = np.zeros(shape=[len(fname_lst), n_sample, dim_1, dim_2])
+        else:
+            raise ValueError("sample contain more than three dimensions")
 
         # file reading in
         for i in tqdm(range(len(fname_lst))):
