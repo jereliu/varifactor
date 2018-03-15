@@ -1,6 +1,6 @@
 # varifactor
 
-> An inference toolbox for Bayesian Exponential-family Factor Analysis models. 
+> An inference toolbox for Bayesian Exponential-family latent factor models. 
 
 * Flexible distribution support:
     * Observation: Gaussian/Poisson/Binomial (lognormal is also possible)
