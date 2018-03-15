@@ -21,7 +21,8 @@
     - [ ] **Example**: inference with lognormal outcome
 
 * Refactor
-    - [ ] Redefine Model so U, V ~ standard Matrix Normal
+    - [ ] Allow non-identity covariance structure for V (model and Elliptical sampler)
+    - [x] Redefine Model so U, V ~ standard Matrix Normal
     - [ ] Visualization module with option for run-time smoothing.
     - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/DistMetric)
 
