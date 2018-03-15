@@ -17,12 +17,16 @@
 ## to-do
 * Feature:
     - [ ] **Metric**: log posterior 
+    - [ ] **Kernel**: IMQ Kernel 
+    - [ ] **Metric**: [Maximum-Mean Discrepancy](http://www.jmlr.org/papers/volume13/gretton12a/gretton12a.pdf)
     - [ ] **Algorithm**: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
     - [ ] **Example**: inference with lognormal outcome
 
 * Refactor
-    - [ ] Allow non-identity covariance structure for V (model and Elliptical sampler)
     - [x] Redefine Model so U, V ~ standard Matrix Normal
+    - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/KernelMetric)
     - [ ] Visualization module with option for run-time smoothing.
-    - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/DistMetric)
+    - [ ] Allow non-identity covariance structure for V (model and Elliptical sampler)
+
+
 
