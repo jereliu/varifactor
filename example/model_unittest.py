@@ -3,14 +3,14 @@
 import numpy as np
 import theano as tt
 
-from varifactor import simu
 from varifactor.model import NEFactorModel as Model
 from varifactor.inference import NEFactorInference as Infer
-from varifactor.metric.moment import MomentDistance
+from varifactor.metric.moment import MomentMetric
 from varifactor.metric.kernel import KSD
 
-from varifactor.setting import param_model, param_infer
+from varifactor.util.setting import param_model, param_infer
 
+from varifactor.util import simu
 from varifactor.util.result_handler import get_sample
 
 

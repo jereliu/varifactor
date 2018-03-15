@@ -19,7 +19,7 @@ class NEFactorInference:
         """
         initialize inference module
         :param model: model specified by varifactor.model.NEFactorModel
-        :param param: inference parameters specified in varifactor.setting
+        :param param: inference parameters specified in varifactor.util.setting
         """
         # check model type is pymc3
         if not isinstance(model, NEFactorModel):

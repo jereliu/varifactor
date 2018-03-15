@@ -16,7 +16,7 @@ from varifactor.model import NEFactorModel as Model
 from varifactor.metric.kernel import KSD
 from varifactor.util.kernel import RBF
 from varifactor.util.result_handler import read_npy, get_eigen
-from varifactor.setting import param_model
+from varifactor.util.setting import param_model
 
 res_addr_0 = "./result/Poisson_n50_p5_k2/"
 report_addr = \
@@ -31,20 +31,25 @@ method_list = os.listdir(res_addr_0)
 
 U = dict()
 V = dict()
-eig_S = dict()
+eig_F = dict()
 
-sd_u = param_model.u["sd"]
-sd_v = param_model.v["sd"]
+if res_addr_0 == "./result/Poisson_n50_p5_k2/":
+    sd_u = 0.2
+    sd_v = 2
+else:
+    sd_u = param_model.u["sd"]
+    sd_v = param_model.v["sd"]
+
 
 for method in method_list:
     res_addr = res_addr_0 + "%s/" % (method)
     U[method] = read_npy(res_addr + "U/")
     V[method] = read_npy(res_addr + "V/")
-    S_method = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
-    eig_S[method] = get_eigen(S_method)
+    F_method = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
+    eig_F[method] = get_eigen(F_method)
 
-del S_method
-pk.dump(eig_S, open("./result/eig_S.pkl", "wr"))
+del F_method
+pk.dump(eig_F, open("./result/eig_F.pkl", "wr"))
 
 
 #####################################
@@ -111,7 +116,7 @@ dens_plot.savefig(report_addr + "Poisson_n50_p5_k2/eig_true.png")
 # drawn from sample distribution
 plt.ioff()
 
-eig_S = pk.load(open("./result/eig_S.pkl", "r"))
+eig_F = pk.load(open("./result/eig_F.pkl", "r"))
 
 for method in ["Metropolis", "NUTS", "ADVI"]:
     # create output directory
@@ -121,14 +126,14 @@ for method in ["Metropolis", "NUTS", "ADVI"]:
         os.mkdir(out_addr)
 
     # prob container
-    eigen_sample = eig_S[method]
+    eigen_sample = eig_F[method]
 
     for iter_id in tqdm(range(1, eigen_sample.shape[0], 2)):
         try:
             dens_plot = plot_2dcontour(data=eigen_sample[iter_id])
         except np.linalg.linalg.LinAlgError:
             continue
-        plt.savefig(out_addr + "S_%d.png" % (iter_id))
+        plt.savefig(out_addr + "F_%d.png" % (iter_id))
 
 plt.ion()
 
@@ -246,7 +251,7 @@ k = 2
 mean_true = 0
 sd_true = 0.2
 
-eig_S = pk.load(open("./result/eig_S.pkl", "r"))
+eig_F = pk.load(open("./result/eig_F.pkl", "r"))
 method = "NUTS"
 
 # prepare model and data
@@ -255,7 +260,7 @@ e_placeholder = np.zeros(shape=(n, p))
 
 model = Model(y_placeholder, param_model, e=e_placeholder)
 
-eigen_sample_all = eig_S[method]
+eigen_sample_all = eig_F[method]
 
 #########################################################
 # 5.1 trial run on single sample
@@ -283,7 +288,7 @@ iter_freq = 10
 
 for method in method_list:
     print("now evaluating method: %s" % method)
-    eigen_sample_all = eig_S[method]
+    eigen_sample_all = eig_F[method]
     n_iter, n_chain = eigen_sample_all.shape[:2]
     ksd_iter[method] = np.zeros(shape=(n_iter/iter_freq+1, 4))
 

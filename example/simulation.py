@@ -7,12 +7,12 @@ import multiprocessing as mp
 import numpy as np
 import theano
 
-from varifactor import simu
 from varifactor.model import NEFactorModel as Model
 from varifactor.inference import NEFactorInference as Infer
 
-from varifactor.setting import param_model, param_infer
+from varifactor.util.setting import param_model, param_infer
 
+from varifactor.util import simu
 from varifactor.util.result_handler import get_sample
 
 # fp=open('memory_profiler.log','w+')

@@ -17,7 +17,7 @@ from varifactor.model import NEFactorModel as Model
 from varifactor.metric.kernel import KSD
 from varifactor.util.kernel import RBF
 from varifactor.util.result_handler import read_npy, get_eigen
-from varifactor.setting import param_model
+from varifactor.util.setting import param_model
 
 ####################
 # 1. read in file  #
@@ -32,8 +32,8 @@ method_list = os.listdir(res_addr)
 
 U = dict()
 V = dict()
-S = dict()
-eig_S = dict()
+F = dict()
+eig_F = dict()
 
 sd_u = param_model.u["sd"]
 sd_v = param_model.v["sd"]
@@ -42,10 +42,10 @@ for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
     U[method] = read_npy(res_addr + "U/")
     V[method] = read_npy(res_addr + "V/")
-    S[method] = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
-    eig_S[method] = get_eigen(S[method])
+    F[method] = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
+    eig_F[method] = get_eigen(F[method])
 
-pk.dump(eig_S, open("./result/eig_S.pkl", "wr"))
+pk.dump(eig_F, open("./result/eig_F.pkl", "wr"))
 
 
 #####################################
@@ -117,7 +117,7 @@ cov_dist = dict()
 prob_dist = dict()
 
 for method in method_list:
-    sample = S[method]
+    sample = F[method]
     mean_dist[method] = emp_measure(sample, type="mean")
     cov_dist[method] = emp_distance(sample, type="cov")
     prob_dist[method] = emp_distance(sample, type="prob")
@@ -159,7 +159,7 @@ pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 # mean_true = 0
 # sd_true = 0.2
 #
-# eig_S = pk.load(open("./result/eig_S.pkl", "r"))
+# eig_F = pk.load(open("./result/eig_F.pkl", "r"))
 # method = "NUTS"
 #
 # # prepare model and data
@@ -168,7 +168,7 @@ pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 #
 # model = Model(y_placeholder, param_model, e=e_placeholder)
 #
-# eigen_sample_all = eig_S[method]
+# eigen_sample_all = eig_F[method]
 #
 # #########################################################
 # # evaluate convergence sample
@@ -180,7 +180,7 @@ pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 #
 # for method in method_list:
 #     print("now evaluating method: %s" % method)
-#     eigen_sample_all = eig_S[method]
+#     eigen_sample_all = eig_F[method]
 #     n_iter, n_chain = eigen_sample_all.shape[:2]
 #     ksd_iter[method] = np.zeros(shape=(n_iter/iter_freq+1, 4))
 #
