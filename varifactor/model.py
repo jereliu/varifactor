@@ -80,31 +80,37 @@ class NEFactorModel(object):
 
             # initialize random variables
             u = pm.Normal(name="U",
-                          mu=0, sd=self.u_par['sd'],
-                          shape=(self.k, self.n), observed=u,
+                          mu=0, sd=1, shape=(self.k, self.n),
+                          observed=u,
                           testval=
-                          0 * np.random.normal(
-                                loc=0, scale=self.u_par['sd'],
-                                size=(self.k, self.n))
+                              0 * np.random.normal(
+                                    loc=0, scale=self.u_par['sd'],
+                                    size=(self.k, self.n))
                           )
             v = pm.Normal(name="V",
-                          mu=0, sd=self.v_par['sd'],
-                          shape=(self.k, self.p), observed=v,
+                          mu=0, sd=1, shape=(self.k, self.p),
+                          observed=v,
                           testval=
-                          0 * np.random.normal(
-                                loc=0, scale=self.v_par['sd'],
-                                size=(self.k, self.p)),
+                              0 * np.random.normal(
+                                    loc=0, scale=self.v_par['sd'],
+                                    size=(self.k, self.p))
                           )
             e = pm.Normal(name="e",
                           mu=0, sd=1,
                           shape=(self.n, self.p), observed=e,
                           testval=
-                          0 * np.random.normal(
-                              loc=0, scale=self.eps_sd,
-                              size=(self.n, self.p))
+                              0 * np.random.normal(
+                                  loc=0, scale=1,
+                                  size=(self.n, self.p))
                           )
 
-            # factor transformation, transpose then apply activation func to each column
+            # factor transformation, covariance
+            # TODO: allow non-identity covariance for v
+            u = self.u_par['sd'] * u
+            v = self.v_par['sd'] * v
+            e = self.eps_sd * e
+
+            # factor transformation, activation (transpose then apply func to each col)
             if track_transform:
                 u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_par["transform"]))
                 v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_par["transform"]))
