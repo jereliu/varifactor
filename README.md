@@ -1,6 +1,6 @@
 # varifactor
 
-An inference toolbox for Bayesian Exponential-family Factor Analysis models. 
+> An inference toolbox for Bayesian Exponential-family Factor Analysis models. 
 
 * Supports Gaussian/Poisson/Binomial-distributed observations, and Gaussian/Dirichlet-distributed factors
 * Automated latent-dimension discovery.
@@ -12,11 +12,11 @@ An inference toolbox for Bayesian Exponential-family Factor Analysis models.
     * Posterior Log Likelihood
     * [Kernel Stein Discrepancy](https://arxiv.org/abs/1602.03253)
 
-## to do
+## to-do
 * Feature:
-    - [] Metric: log posterior 
-    - [] Algorithm: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
+    - [ ] Metric: log posterior 
+    - [ ] Algorithm: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
 
 * Refactor
-    - [] Visualization module with option for run-time smoothing.
-    - [] Unified metric module: (Metric -> MomentMetric/DensityMetric/DistMetric)
+    - [ ] Visualization module with option for run-time smoothing.
+    - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/DistMetric)
