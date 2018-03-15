@@ -3,7 +3,7 @@
 > An inference toolbox for Bayesian Exponential-family Factor Analysis models. 
 
 * Flexible distribution support:
-    * Observation: Gaussian/Poisson/Binomial (log normal is also possible)
+    * Observation: Gaussian/Poisson/Binomial (lognormal is also possible)
     * Latent factor: Gaussian/Dirichlet
 * Automated latent-dimension discovery.
 * Six modern inference algorithms: 
@@ -16,9 +16,9 @@
 
 ## to-do
 * Feature:
-    - [ ] Metric: log posterior 
-    - [ ] Algorithm: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
-    - [ ] Example: inference with lognormal outcome
+    - [ ] **Metric**: log posterior 
+    - [ ] **Algorithm**: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
+    - [ ] **Example**: inference with lognormal outcome
 
 * Refactor
     - [ ] Visualization module with option for run-time smoothing.
