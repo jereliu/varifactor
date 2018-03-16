@@ -32,6 +32,7 @@ method_list = os.listdir(res_addr)
 
 U = dict()
 V = dict()
+Y = dict()
 F = dict()
 eig_F = dict()
 
@@ -42,17 +43,17 @@ for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
     U[method] = read_npy(res_addr + "U/")
     V[method] = read_npy(res_addr + "V/")
+    Y[method] = read_npy(res_addr + "Y/")
     F[method] = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
     eig_F[method] = get_eigen(F[method])
 
 pk.dump(eig_F, open("./result/eig_F.pkl", "wr"))
 
-
 #####################################
 # 2. helper functions               #
 #####################################
 
-def emp_distance(sample, type = "mean", sd_true=1):
+def moment_distance(sample, type = "mean", sd_true=1):
     n_sample, n_iter, dim1, dim2 = sample.shape
 
     if type == "mean":
@@ -79,7 +80,7 @@ def emp_distance(sample, type = "mean", sd_true=1):
     return dist_iter
 
 
-def emp_measure(sample, type="mean", n_boot=500, sd_true=1):
+def moment_measure(sample, type="mean", n_boot=500, sd_true=1):
     """
     compute empirical measures as well as bootstrap percentiles (5%, 50%, 95%)
     :param sample:
@@ -91,14 +92,14 @@ def emp_measure(sample, type="mean", n_boot=500, sd_true=1):
     n_chain, n_iter, dim1, dim2 = sample.shape
 
     # compute mean
-    measure_mean = emp_distance(sample, type=type, sd_true=sd_true)
+    measure_mean = moment_distance(sample, type=type, sd_true=sd_true)
 
     # compute bootstrap sample
     measure_boot_sample = np.zeros(shape=(n_boot, n_iter))
     for boot_id in tqdm(range(n_boot)):
         boot_chain_id = np.random.choice(n_chain, n_chain)
         measure_boot_sample[boot_id] = \
-            emp_distance(sample[boot_chain_id], type=type, sd_true=sd_true)
+            moment_distance(sample[boot_chain_id], type=type, sd_true=sd_true)
 
     measure_pc = np.percentile(measure_boot_sample, (5, 50, 95), axis=0).T
     measure_all = \
@@ -118,9 +119,9 @@ prob_dist = dict()
 
 for method in method_list:
     sample = F[method]
-    mean_dist[method] = emp_measure(sample, type="mean")
-    cov_dist[method] = emp_distance(sample, type="cov")
-    prob_dist[method] = emp_distance(sample, type="prob")
+    mean_dist[method] = moment_measure(sample, type="mean")
+    cov_dist[method] = moment_distance(sample, type="cov")
+    prob_dist[method] = moment_distance(sample, type="prob")
 
 pk.dump(mean_dist, open("./result/mean.pkl", "wr"))
 pk.dump(cov_dist, open("./result/cov.pkl", "wr"))
@@ -147,7 +148,29 @@ pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 # plt.show()
 
 # 3.2. Log-likelihood
-# TODO
+n = 50
+p = 5
+k = 2
+mean_true = 0
+sd_true = 0.2
+
+# construct model object
+y_placeholder = theano.shared(np.random.normal(size=(n, p)))
+e_placeholder = np.zeros(shape=(n, p))
+
+model = Model(y_placeholder, param_model, e=e_placeholder)
+
+# extract sample
+method = method_list[0]
+chain_id = 500
+iter_id = 1000
+
+u = U[method][chain_id, iter_id]
+v = V[method][chain_id, iter_id]
+y = Y[method][chain_id]
+
+args = {'u': u, 'v': v, 'y': y}
+model.llik_full(**args)
 
 
 # ##########################################

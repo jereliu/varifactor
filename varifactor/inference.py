@@ -137,24 +137,24 @@ class NEFactorInference:
         if setting is None:
             setting = self.setting['Slice'].copy()
 
-        with self.model as nef_model:
+        with self.model as fa_model:
             # configure covariance matrix
             # TODO: allow non-identity covariance structure
             logging.warning('Setting Prior Covariance to Identity..')
-            v_var = nef_model["V"].distribution.variance.eval()
-            u_diag = np.ones(nef_model["U"].init_value.size)
-            v_diag = np.ones(nef_model["V"].init_value.size) * v_var
+            v_var = fa_model["V"].distribution.variance.eval()
+            u_diag = np.ones(fa_model["U"].init_value.size)
+            v_diag = np.ones(fa_model["V"].init_value.size) * v_var
             prior_cov = np.diag(np.concatenate((u_diag, v_diag)))
 
             # setup sampler
-            var_set_uv = [nef_model["U"], nef_model["V"]]
+            var_set_uv = [fa_model["U"], fa_model["V"]]
             mc_uv = pm.EllipticalSlice(var_set_uv, prior_cov=prior_cov)  # no hyper-parameters
             mc_set = [mc_uv]
 
-            if len(nef_model.unobserved_RVs) > 2:
+            if len(fa_model.unobserved_RVs) > 2:
                 # if there are other parameters, sample those using NUTS
                 var_set_other = \
-                    [RV for RV in nef_model.unobserved_RVs if RV.name not in ["U", "V"]]
+                    [RV for RV in fa_model.unobserved_RVs if RV.name not in ["U", "V"]]
                 mc_other = pm.NUTS(var_set_other)
                 mc_set = [mc_uv, mc_other]
 
