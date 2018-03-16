@@ -5,9 +5,10 @@ import numpy as np
 import autograd
 import autograd.numpy as atnp
 
-import theano.tensor as tensor
+import theano as tt
 import pymc3 as pm
 
+from varifactor.util.decorator import defunct
 
 # Set up logging.
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +20,7 @@ class NEFactorModel(object):
                  u=None, v=None, e=None, track_transform=False):
         """
 
-        :param y: a theano.tensor.sharedvar.TensorSharedVariable object, created using theano.shared(npy_array)
+        :param y: a theano.tensor.sharedvar.TensorSharedVariable object, created using theano.shared(np.array)
         :param param:
         :param u: observed value of u, if None then u is treated as an unobserved variable
         :param v: observed value of v, if None then v is treated as an unobserved variable
@@ -118,7 +119,7 @@ class NEFactorModel(object):
             else:
                 u_t = _factor_transform(u.T, name=self.u_par["transform"])
                 v_t = _factor_transform(v.T, name=self.v_par["transform"])
-                theta = tensor.dot(u_t, v_t.T) + e
+                theta = tt.tensor.dot(u_t, v_t.T) + e
 
             # theta
             y = _nef_family(name="y", theta=theta, n=self.n, p=self.p,
@@ -129,9 +130,69 @@ class NEFactorModel(object):
 
         self.model = nef_factor
 
+    ##############################################################################
+    # method for full distribution: log likelihood
+    ##############################################################################
+
+    def llik_full(self, y, u, v, e=None, d=None):
+        """
+        compute log likelihood wrt full diagonal matrix
+        :param y: n x p np.array of observed outcome
+        :param u: n x k np.array of latent feature
+        :param v: p x k np.array of factor loadings
+        :param e: n x p np.array of sampled residuals
+        :param e: k x 1 np.array of sampled diagonal element
+        :return:
+        """
+        # TODO: add support for non-identity prior for v
+        # TODO: add support for diagonal element d and their prior
+
+        # prepare default parameter matrices
+        if e is None:
+            e_mat = np.zeros(shape=(self.n, self.p))
+        else:
+            e_mat = e
+
+        if d is None:
+            d_mat = np.ones(shape=self.k)
+        d_mat = np.diag(d_mat)
+
+        u_mat = _factor_transform(u.T, name=self.u_par["transform"], format="numpy").T
+        v_mat = _factor_transform(v.T, name=self.v_par["transform"], format="numpy").T
+
+        # construct theta
+        theta = reduce(np.dot, [u_mat, d_mat, v_mat.T]) + e_mat
+
+        # construct likelihood
+        likelihood = np.sum(- y * theta + _nef_partition(theta, family=self.family))
+
+        # construct prior
+        prior_u = -0.5 * np.sum(u**2)/(self.u_par['sd']**2)
+        prior_v = -0.5 * np.sum(v**2)/(self.v_par['sd']**2)
+        prior_all = [prior_u, prior_v]
+
+        if e is not None:
+            prior_e = -0.5 * np.sum(e**2)/(self.eps_sd**2)
+            prior_all.append(prior_e)
+        if d is not None:
+            prior_d = np.nan
+            if np.isnan(prior_d):
+                raise NotImplementedError("prior for diagonal element d not implemented")
+            prior_all.append(prior_d)
+
+        # assemble
+        llik_all = likelihood + np.sum(prior_all)
+
+        return llik_all
+
+
+    ##############################################################################
+    # method for eigen distributions: likelihood, log likelihood, gradient
+    ##############################################################################
+
     def lik_eig(self, eigen):
         """
-        unnormalized likelihood, wrt the stacked parameter matrix S = [U^T, V^T]^T
+        unnormalized likelihood, wrt the stacked factor matrix F = [U^T, V^T]^T
         :param eigen: a 1 x d numpy array of input
         :return:
         """
@@ -153,7 +214,7 @@ class NEFactorModel(object):
 
     def llik_eig(self, eigen):
         """
-        log likelihood, wrt the stacked parameter matrix S = [U^T, V^T]^T
+        log likelihood, wrt the stacked factor matrix F = [U^T, V^T]^T
         :param eigen: a 1 x d numpy array of input
         :return:
         """
@@ -177,7 +238,7 @@ class NEFactorModel(object):
         """
         assuming prior distribution is multivariate normal,
         produce gradient function with respect to each of the n eigenvalues
-        of the stacked parameter matrix S = [U^T, V^T]^T
+        of the stacked factor matrix F = [U^T, V^T]^T
 
         :param eigen: eigenvalues, a sample_size x k matrix
         :param indep: whether covariance for prior MVN is identity
@@ -220,6 +281,7 @@ class NEFactorModel(object):
 
         return grad
 
+    @defunct
     def eigrad_u(self, u, native=False):
         """
         produce gradient function with respect to U (very noisy, due to variation in eigenvectors)
@@ -247,6 +309,7 @@ class NEFactorModel(object):
 
         return dL_deig
 
+    @defunct
     def _grad_LU(self, u):
         """
         compute d_L/d_U
@@ -262,6 +325,7 @@ class NEFactorModel(object):
         dL = (y - dA).dot(v.T) - u/self.u_par['sd']**2
         return dL
 
+    @defunct
     def _grad_Ud(self, u):
         """
         compute d_U/d_eig
@@ -283,19 +347,25 @@ class NEFactorModel(object):
 # helper functions ###############
 ##################################
 
-def _factor_transform(y, name="identity"):
+def _factor_transform(y, name="identity", format=None):
     if name == "identity":
-        return y
+        y_transform = y
     else:
+        # else transform using theano tensor operations
         if name == "exp":
-            return pm.math.exp(y)
+            y_transform = pm.math.exp(y)
         elif name == "softplus":
-            return tensor.nnet.softmax(y)
+            y_transform = tt.tensor.nnet.softmax(y)
         elif name == "softmax":
             # column-wise softmax
-            return tensor.nnet.softmax(y.T).T
+            y_transform = tt.tensor.nnet.softmax(y.T).T
         else:
             raise ValueError('function name (' + str(name) + ') not defined')
+
+        if format is "numpy":
+            y_transform = y_transform.eval()
+
+    return y_transform
 
 
 def _nef_family(theta, n, p, observed, family="Gaussian", name="y"):
@@ -332,6 +402,32 @@ def _nef_family(theta, n, p, observed, family="Gaussian", name="y"):
         raise ValueError('distribution family (' + str(family) + ') not supported')
 
     return y
+
+
+def _nef_partition(theta, family="Gaussian"):
+    """
+    :param theta: value of natural parameter
+    :param n: sample size
+    :param family: distribution name
+    :return:
+    """
+
+    if family == "Gaussian":
+        A = theta**2/2.
+
+    elif family == "Poisson":
+        A = np.exp(theta)
+
+    elif family == "Binomial":
+        # TODO: give options to specify binom_n
+        n_binom = 10
+        logging.warn('n is fixed to ' + str(n_binom) + ' for Binomial(n, p)')
+        A = n_binom * np.log(1 + np.exp(theta))
+
+    else:
+        raise ValueError('distribution family (' + str(family) + ') not supported')
+
+    return A
 
 
 def _nef_partition_deriv(theta, family="Gaussian"):
