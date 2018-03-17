@@ -70,10 +70,10 @@ def contour2d_grid(sample, save_addr=None, figsize=(20, 20)):
     # start ploting
     sample_plot = sample.reshape((N, dim))
     plot_id = 0
-    for i in range(dim):
+    for i in range(dim-1):
         for j in range(1, dim):
             plot_id += 1
-            plt.subplot(dim, dim-1, plot_id)
+            plt.subplot(dim-1, dim-1, plot_id)
 
             if i >= j:
                 plt.plot()
@@ -98,7 +98,7 @@ def contour2d_grid(sample, save_addr=None, figsize=(20, 20)):
 # 1. Sample 2d factors from Poisson FA model ####
 #################################################
 
-family = "Poisson"
+family = param_model.y["family"]
 
 N = 100
 P = 3
@@ -119,41 +119,44 @@ nefm_infer = Infer(nefm_model, param_infer)
 
 # run method of choice
 method_list = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"]
-method_name = method_list[1]
+method_name = method_list[-1]
 track_vi_during_opt = False
 
-for method_name in method_list:
-    if method_name == "Metropolis":
-        sample = nefm_infer.run_metro()
-    elif method_name == "Slice":
-        sample = nefm_infer.run_slice()
-    elif method_name == "NUTS":
-        sample = nefm_infer.run_nuts()
-    elif method_name == "ADVI":
-        sample = nefm_infer.run_advi(track=track_vi_during_opt)
-    elif method_name == "NFVI":
-        sample = nefm_infer.run_nfvi(track=track_vi_during_opt)
-    elif method_name == "SVGD":
-        sample = nefm_infer.run_svgd(track=track_vi_during_opt)
+# for method_name in method_list[2]:
+if method_name == "Metropolis":
+    sample = nefm_infer.run_metro()
+elif method_name == "Slice":
+    sample = nefm_infer.run_slice()
+elif method_name == "NUTS":
+    sample = nefm_infer.run_nuts()
+elif method_name == "ADVI":
+    sample = nefm_infer.run_advi(track=track_vi_during_opt)
+elif method_name == "NFVI":
+    sample = nefm_infer.run_nfvi(track=track_vi_during_opt)
+elif method_name == "SVGD":
+    sample = nefm_infer.run_svgd(track=track_vi_during_opt)
+else:
+    raise ValueError("method '%s' not supported" % method_name)
 
-    #################################
-    # 2. Visualize Posterior     ####
-    #################################
-    # plot
-    if sample.method_type == "vi" and not track_vi_during_opt:
-        V_sample = get_sample(sample, "V").T
-    else:
-        V_sample = get_sample(sample, "V")
+#################################
+# 2. Visualize Posterior     ####
+#################################
+# plot
+if sample.method_type == "vi" and not track_vi_during_opt:
+    V_sample = get_sample(sample, "V").T
+else:
+    V_sample = get_sample(sample, "V")
 
-    contour2d_grid(V_sample, report_addr + "contour/" + method_name + ".pdf")
+contour2d_grid(V_sample,
+               "%s/contour/%s/%s.pdf" % (report_addr, family, method_name))
 
 
 # plot factor norm verses density
-from scipy import stats
-from mpl_toolkits.mplot3d import Axes3D
 
-values = V_sample.T
-kde = stats.gaussian_kde(values)
+N, dim1, dim2 = V_sample.shape
+V_sample_select = V_sample.reshape((N, dim1 * dim2))
+values = V_sample_select[90000:, :3].T
+kde = st.gaussian_kde(values)
 density = kde(values)
 
 
@@ -161,6 +164,7 @@ plt.plot(np.sum(values**2, 0), density, 'o')
 
 # plot 3D V density, if K==3
 if K == 3:
+    from mpl_toolkits.mplot3d import Axes3D
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
     x, y, z = values
     ax.scatter(x, y, z, c=density)

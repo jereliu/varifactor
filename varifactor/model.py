@@ -115,7 +115,7 @@ class NEFactorModel(object):
             if track_transform:
                 u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_par["transform"]))
                 v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_par["transform"]))
-                theta = pm.Deterministic("theta", tensor.dot(u_t, v_t.T) + e)
+                theta = pm.Deterministic("theta", tt.tensor.dot(u_t, v_t.T) + e)
             else:
                 u_t = _factor_transform(u.T, name=self.u_par["transform"])
                 v_t = _factor_transform(v.T, name=self.v_par["transform"])
