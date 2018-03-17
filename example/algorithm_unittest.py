@@ -3,6 +3,7 @@ import os
 os.environ['MKL_THREADING_LAYER'] = "GNU"
 
 import numpy as np
+import scipy.stats as st
 import theano as tt
 
 from varifactor.model import NEFactorModel as Model
@@ -16,14 +17,91 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
+report_addr = \
+    "/home/jeremiah/Dropbox/Research/Harvard/Thesis/Lorenzo/" \
+    "1. varifactor/Report/Progress/2018_03_Week_2/plot/"
+
+
+#################################################
+# 0. helper function                         ####
+#################################################
+
+def contour_2d(data):
+    """
+
+    :param data: a Nx2 npy tensor
+    :return:
+    """
+    x = data[:, 0]
+    y = data[:, 1]
+
+    # define grid
+    xmin, xmax = np.min(x), np.max(x)
+    ymin, ymax = np.min(y), np.max(y)
+
+    xx, yy = np.mgrid[xmin:xmax:100j, ymin:ymax:100j]
+    positions = np.vstack([xx.ravel(), yy.ravel()])
+
+    # if no function, do kernel density estimation based on data
+    values = np.vstack([x, y])
+    f = st.gaussian_kde(values)
+    z = np.reshape(f(positions).T, xx.shape)
+
+    plt.contourf(xx, yy, z, cmap='Blues')
+
+
+def contour2d_grid(sample, save_addr=None, figsize=(20, 20)):
+    """
+
+    :param sample: a N x dim1 x dim2 npy array
+    :param save_addr:
+    :param figsize:
+    :return:
+    """
+    N, dim1, dim2 = sample.shape
+    dim = dim1 * dim2
+
+    # create directory if not exist
+    if save_addr is not None:
+        if not os.path.isdir(os.path.dirname(save_addr)):
+            os.mkdir(os.path.dirname(save_addr))
+        plt.ioff()
+
+    # start ploting
+    sample_plot = sample.reshape((N, dim))
+    plot_id = 0
+    for i in range(dim):
+        for j in range(1, dim):
+            plot_id += 1
+            plt.subplot(dim, dim-1, plot_id)
+
+            if i >= j:
+                plt.plot()
+                plt.axis('off')
+            else:
+                print("plotting (%d, %d)" % (i + 1, j + 1))
+                contour_2d((sample_plot[:, (i, j)]))
+                plt.title("(%d, %d)" % (i + 1, j + 1))
+
+    # optionally, save
+    if save_addr is not None:
+        fig = plt.gcf()
+        fig.set_size_inches(figsize[0], figsize[1])
+        fig.savefig(save_addr, bbox_inches='tight')
+        plt.close()
+        plt.ion()
+
+
+
+
 #################################################
 # 1. Sample 2d factors from Poisson FA model ####
 #################################################
 
 family = "Poisson"
 
-N = 5
-P = 2
+N = 100
+P = 3
 K = 2
 
 # generate data
@@ -40,33 +118,35 @@ nefm_model = Model(y_train, param_model, e=e_train)
 nefm_infer = Infer(nefm_model, param_infer)
 
 # run method of choice
-method_name = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"][1]
+method_list = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"]
+method_name = method_list[1]
 track_vi_during_opt = False
 
-if method_name == "Metropolis":
-    sample = nefm_infer.run_metro()
-elif method_name == "Slice":
-    sample = nefm_infer.run_slice()
-elif method_name == "NUTS":
-    sample = nefm_infer.run_nuts()
-elif method_name == "ADVI":
-    sample = nefm_infer.run_advi(track=track_vi_during_opt)
-elif method_name == "NFVI":
-    sample = nefm_infer.run_nfvi(track=track_vi_during_opt)
-elif method_name == "SVGD":
-    sample = nefm_infer.run_svgd(track=track_vi_during_opt)
+for method_name in method_list:
+    if method_name == "Metropolis":
+        sample = nefm_infer.run_metro()
+    elif method_name == "Slice":
+        sample = nefm_infer.run_slice()
+    elif method_name == "NUTS":
+        sample = nefm_infer.run_nuts()
+    elif method_name == "ADVI":
+        sample = nefm_infer.run_advi(track=track_vi_during_opt)
+    elif method_name == "NFVI":
+        sample = nefm_infer.run_nfvi(track=track_vi_during_opt)
+    elif method_name == "SVGD":
+        sample = nefm_infer.run_svgd(track=track_vi_during_opt)
 
-#################################
-# 2. Visualize Posterior     ####
-#################################
-# plot
-if sample.method_type == "vi" and not track_vi_during_opt:
-    V_sample = get_sample(sample, "V")[:, 0, :].T
-else:
-    V_sample = get_sample(sample, "V")[:, 0, :]
+    #################################
+    # 2. Visualize Posterior     ####
+    #################################
+    # plot
+    if sample.method_type == "vi" and not track_vi_during_opt:
+        V_sample = get_sample(sample, "V").T
+    else:
+        V_sample = get_sample(sample, "V")
 
-sns.jointplot(x=V_sample[:, 0], y=V_sample[:, 1], kind='kde',
-              xlim=(-4, 4), ylim=(-4, 4))
+    contour2d_grid(V_sample, report_addr + "contour/" + method_name + ".pdf")
+
 
 # plot factor norm verses density
 from scipy import stats
@@ -85,3 +165,5 @@ if K == 3:
     x, y, z = values
     ax.scatter(x, y, z, c=density)
     plt.show()
+
+
