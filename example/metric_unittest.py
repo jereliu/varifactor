@@ -19,7 +19,7 @@ from varifactor.util.kernel import RBF
 from varifactor.util.result_handler import read_npy, get_eigen
 from varifactor.util.setting import param_model
 
-from varifactor.util.decorator import add_save_plot_option
+from varifactor.util.decorator import add_plot_option
 
 ####################
 # 1. read in file  #
@@ -148,50 +148,91 @@ def compute_llik(u, v, y, lik_fun):
     return lik_list
 
 
-@add_save_plot_option
-def measure_plot(measure_dict,
-                 legend_loc="upper left", pal=None, title=None):
+def iter_smooth(sample, span=5, method="mean"):
+    """
+    helper function to smooth sample measurements over iterations
+
+    :param sample: np.array with dimension n_iter x n_stat
+    :param span: number of iteration to include for local averaging
+    :param method: smoothing method to be used
+    :return:
+    """
+    # prepare meta variables
+    span_radius = int((span-1)/2)
+    if span_radius == 0:
+        return sample
+
+    if method == "mean":
+        smooth_fun = np.mean
+    elif method == "median":
+        smooth_fun = np.median
+    else:
+        raise ValueError("method %s not supported" % method)
+
+    n_iter, n_stat = sample.shape
+
+    sample_smooth = np.zeros(shape=(n_iter, n_stat))
+    for stat_id in range(n_stat):
+        stat = sample[:, stat_id]
+        stat_smooth = stat.copy()
+        for iter_id in range(1, n_iter):
+            iter_lw = np.max((iter_id - span_radius, 1))
+            iter_up = np.min((iter_id + span_radius, n_iter))
+            stat_smooth[iter_id] = smooth_fun(stat[iter_lw:iter_up])
+
+        sample_smooth[:, stat_id] = stat_smooth
+
+    return sample_smooth
+
+
+@add_plot_option(option="save")
+def measure_plot(measure_dict, pal=None,
+                 smooth_span=5, smooth_method="mean",
+                 legend_loc="upper left", ylim=None, title=None):
     """
 
     :param measure_dict:
             a dictionary of methods: n_iter x 4 summary of target measure
-    :param legend_loc:
     :param pal: palette, one for each method in the dictionary
-    :param title:
-    :param save_addr:
+    :param smooth_span: num of iterations to include for line smoothing
+    :param legend_loc: location of legend 'upper/lower' + 'left/right'
+    :param ylim: (optional) limit for y-axis
+    :param title: (optional) parameter, plot title
     :return:
     """
 
     # set up environment & device
     if pal is None:
         pal = ["#DC3522", "#11111D", "#0B486D", "#D35400"]
-    method_list = measure_dict.keys()
+    method_list = np.sort(measure_dict.keys())
 
     # plot
     sns.set_style('darkgrid')
     for method_id in range(len(method_list)):
         method = method_list[method_id]
         measure_array = measure_dict[method]
+        measure_array = \
+            iter_smooth(measure_array, span=smooth_span, method=smooth_method)
         # mean and ci plot
-        plt.plot(measure_array[:, 2], c=pal[method_id], label = method)
-        plt.fill_between(x=np.arange(measure_array.shape[0]),
-                         y1=measure_array[:, 1],
-                         y2=measure_array[:, 3],
+        plt.plot(measure_array[1:, 2], c=pal[method_id], label=method)
+        plt.fill_between(x=np.arange(measure_array.shape[0]-1),
+                         y1=measure_array[1:, 1],
+                         y2=measure_array[1:, 3],
                          color=pal[method_id], alpha=0.5)
 
     # add extra stuff
     plt.legend(loc=legend_loc)
     if title is not None:
         plt.title(title)
+    if ylim is not None:
+        plt.ylim(ylim)
 
 
 
 #####################################
 # 3. compute per iteration metric   #
 #####################################
-
-
-# 3.1 Mean, Cov, Coverage Probability (V)
+# 3.1 Mean, Cov, Coverage Probability (for stacked factor matrix)
 mean_dist = dict()
 cov_dist = dict()
 prob_dist = dict()
@@ -208,19 +249,19 @@ pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 
 
 measure_plot(
-    measure_dict=mean_dist,
+    measure_dict=mean_dist, ylim=(0, 0.17), smooth_span=10,
     legend_loc="upper right", title="Posterior Mean",
-    save_size=[15, 6], save_addr=report_addr + "/measure/mean_dist.pdf")
+    save_size=[12, 5], save_addr=report_addr + "/measure/mean_dist.pdf")
 
 measure_plot(
-    measure_dict=cov_dist,
+    measure_dict=cov_dist, ylim=(0, 0.5),
     legend_loc="upper right", title="Posterior Covariance",
-    save_size=[15, 6], save_addr=report_addr + "/measure/cov_dist.pdf")
+    save_size=[12, 5], save_addr=report_addr + "/measure/cov_dist.pdf")
 
 measure_plot(
-    measure_dict=prob_dist,
+    measure_dict=prob_dist, ylim=(0.8, 1),
     legend_loc="lower right", title="95% Coverage Probability",
-    save_size=[15, 6], save_addr=report_addr + "/measure/prob_dist.pdf")
+    save_size=[12, 5], save_addr=report_addr + "/measure/prob_dist.pdf")
 
 # 3.2. Log-likelihood
 n = 50
@@ -248,77 +289,72 @@ pk.dump(llik_dist, open("./result/llik.pkl", "wr"))
 measure_plot(
     measure_dict=llik_dist,
     legend_loc="lower right", title="Log Likelihood",
-    save_size=[15, 6], save_addr = report_addr + "/measure/llik_dist.pdf")
+    save_size=[12, 5], save_addr = report_addr + "/measure/llik_dist.pdf")
 
 
 
-# ##########################################
-# # 4. compute per iteration metric, KSD   #
-# ##########################################
-# n = 50
-# p = 5
-# k = 2
-# mean_true = 0
-# sd_true = 0.2
-#
-# eig_F = pk.load(open("./result/eig_F.pkl", "r"))
-# method = "NUTS"
-#
-# # prepare model and data
-# y_placeholder = theano.shared(np.random.normal(size=(n, p)))
-# e_placeholder = np.zeros(shape=(n, p))
-#
-# model = Model(y_placeholder, param_model, e=e_placeholder)
-#
-# eigen_sample_all = eig_F[method]
-#
-# #########################################################
-# # evaluate convergence sample
-#
-# pval_iter = dict()
-# ksd_iter = dict()
-# n_boot = 100
-# iter_freq = 10
-#
-# for method in method_list:
-#     print("now evaluating method: %s" % method)
-#     eigen_sample_all = eig_F[method]
-#     n_iter, n_chain = eigen_sample_all.shape[:2]
-#     ksd_iter[method] = np.zeros(shape=(n_iter/iter_freq+1, 4))
-#
-#     # prepare kernel
-#     for iter_id in tqdm(range(0, n_iter, iter_freq)):
-#         eigen_sample = eigen_sample_all[iter_id]
-#
-#         # testing
-#         sigma2 = RBF().set_sigma(eigen_sample)
-#         rbf = RBF(sigma2=sigma2)
-#         ksd = KSD(model=model, kernel=rbf, eigen=True)
-#         ksd_val, _ = ksd.stat(eigen_sample)
-#
-#         # bootstrap confidence interval
-#         ksd_ci = np.zeros(shape=n_boot)
-#         for b in range(n_boot):
-#             boot_id = np.random.choice(n_chain, n_chain)
-#             ksd_ci[b] = ksd.stat(eigen_sample[boot_id])[0]
-#         ksd_lo, ksd_md, ksd_up = np.percentile(ksd_ci, (5, 50, 95))
-#
-#         # store
-#         ksd_iter[method][iter_id/iter_freq] = \
-#             np.array([ksd_val, ksd_lo, ksd_md, ksd_up])
-#
-# pk.dump(ksd_iter, open("./result/ksd.pkl", "wr"))
-#
-# #########################################################
-# # plot
-#
-# col_list = ["#DC3522", "#11111D", "#0B486D", "#D35400"]
-# sns.set_style('darkgrid')
-# for method_id in range(len(method_list)):
-#     method = method_list[method_id]
-#     plt.plot(ksd_iter[method][:, 2], c=col_list[method_id])
-#     plt.fill_between(x=np.arange(ksd_iter[method].shape[0]),
-#                      y1=ksd_iter[method][:, 1],
-#                      y2=ksd_iter[method][:, 3],
-#                      color=col_list[method_id], alpha=0.5)
-# plt.ylim((0, 4))
+##########################################
+# 4. compute per iteration metric, KSD   #
+##########################################
+n = 50
+p = 5
+k = 2
+mean_true = 0
+sd_true = 0.2
+
+eig_F = pk.load(open("./result/eig_F.pkl", "r"))
+method = "NUTS"
+
+# prepare model and data
+y_placeholder = theano.shared(np.random.normal(size=(n, p)))
+e_placeholder = np.zeros(shape=(n, p))
+
+model = Model(y_placeholder, param_model, e=e_placeholder)
+
+eigen_sample_all = eig_F[method]
+
+#########################################################
+# evaluate convergence sample
+
+pval_iter = dict()
+ksd_iter = dict()
+n_boot = 100
+iter_freq = 10
+
+for method in method_list:
+    print("now evaluating method: %s" % method)
+    eigen_sample_all = eig_F[method]
+    n_iter, n_chain = eigen_sample_all.shape[:2]
+    ksd_iter[method] = np.zeros(shape=(n_iter/iter_freq+1, 4))
+
+    # prepare kernel
+    for iter_id in tqdm(range(0, n_iter, iter_freq)):
+        eigen_sample = eigen_sample_all[iter_id]
+
+        # testing
+        sigma2 = RBF().set_sigma(eigen_sample)
+        rbf = RBF(sigma2=sigma2)
+        ksd = KSD(model=model, kernel=rbf, eigen=True)
+        ksd_val, _ = ksd.stat(eigen_sample)
+
+        # bootstrap confidence interval
+        ksd_ci = np.zeros(shape=n_boot)
+        for b in range(n_boot):
+            boot_id = np.random.choice(n_chain, n_chain)
+            ksd_ci[b] = ksd.stat(eigen_sample[boot_id])[0]
+        ksd_lo, ksd_md, ksd_up = np.percentile(ksd_ci, (5, 50, 95))
+
+        # store
+        ksd_iter[method][iter_id/iter_freq] = \
+            np.array([ksd_val, ksd_lo, ksd_md, ksd_up])
+
+pk.dump(ksd_iter, open("./result/ksd.pkl", "wr"))
+
+#########################################################
+# plot
+ksd_dist = pk.load(open("./result/ksd.pkl", "r"))
+measure_plot(
+    measure_dict=ksd_dist, ylim=(0, 4),
+    smooth_span=10, smooth_method="median",
+    legend_loc="upper right", title="KSD for eigenvalue of F",
+    save_size=[12, 5], save_addr=report_addr + "/measure/kern_dist.pdf")

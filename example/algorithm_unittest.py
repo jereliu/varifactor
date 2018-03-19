@@ -16,7 +16,7 @@ from varifactor.util.result_handler import get_sample
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from varifactor.util.decorator import add_save_plot_option
+from varifactor.util.decorator import add_plot_option
 
 
 report_addr = \
@@ -52,7 +52,7 @@ def contour_2d(data):
     plt.contourf(xx, yy, z, cmap='Blues')
 
 
-@add_save_plot_option
+@add_plot_option(option="save")
 def contour2d_grid(sample):
     """
 
