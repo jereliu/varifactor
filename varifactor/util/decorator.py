@@ -11,12 +11,30 @@ def defunct(func):
     return func_wrapper
 
 
-def add_save_plot_option(func):
+def add_plot_option(option="save"):
     """
     add option to save plot to address specified by save_addr
     :param func:
+    :param option:
+        option="save": save plot to address specified by save_addr,
+                       with size specified by save_size
     :return:
     """
+    if option is "save":
+        option_deco = add_plot_option_save
+    return option_deco
+
+
+def add_plot_option_save(func):
+    """
+    add option to save plot to address specified by save_addr
+    :param func:
+    :param option:
+        option="save": save plot to address specified by save_addr,
+                       with size specified by save_size
+    :return:
+    """
+
     def func_wrapper(save_size, save_addr=None, *args, **kwargs):
         # create save directory if not exist
         if save_addr is not None:
@@ -35,6 +53,7 @@ def add_save_plot_option(func):
             plt.ion()
 
     return func_wrapper
+
 
 
 if __name__ == "__main__":
