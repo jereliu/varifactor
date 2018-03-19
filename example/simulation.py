@@ -19,7 +19,8 @@ from varifactor.util.result_handler import get_sample
 # @profile(stream=fp)
 
 
-def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
+def run_simu(inference, n_chain=500,
+             methods=['ADVI', 'Metropolis', 'NUTS', 'Slice', 'SVGD'],
              res_addr="./result/", task_name=None):
 
 
@@ -39,6 +40,8 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
             os.mkdir(res_addr + method_name + "/U")
             os.mkdir(res_addr + method_name + "/V")
             os.mkdir(res_addr + method_name + "/Y")
+            os.mkdir(res_addr + method_name + "/time")
+
 
         # # set container size for algorithm iterations
         # if method_name is 'ADVI':
@@ -82,6 +85,7 @@ def run_simu(inference, n_chain=500, methods=['ADVI', 'Metropolis', 'NUTS'],
             np.save(res_addr + method_name + "/U/%d" % (iter_num), u_sample)
             np.save(res_addr + method_name + "/V/%d" % (iter_num), v_sample)
             np.save(res_addr + method_name + "/Y/%d" % (iter_num), y_train)
+            np.save(res_addr + method_name + "/time/%d" % (iter_num), result.iter_time)
 
     return None
 
@@ -109,11 +113,11 @@ if __name__ == "__main__":
                   uv_scale=[param_model.u['sd'], param_model.v['sd']])
 
     y_shared = theano.shared(y_train)
-    nefm_model = Model(y_train, param_model, e=e_train)
+    nefm_model = Model(y_shared, param_model, e=e_train)
     nefm_infer = Infer(nefm_model, param_infer)
 
     #########################
     # 2. Run Simulation  ####
     #########################
     run_simu(nefm_infer, n_chain=1000,
-             methods=['ADVI', 'Metropolis', 'NUTS'], res_addr=res_path)
+             methods=['Slice', 'SVGD'], res_addr=res_path)
