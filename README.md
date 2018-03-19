@@ -24,7 +24,7 @@
     - [x] **Metric**: log posterior 
 
 * Refactor
-    - [ ] Visualization module with option for run-time smoothing.
+    - [ ] Visualization module with option for run-time smoothing and with time on x-axis
     - [ ] Unified metric module: (Metric -> MomentMetric/DensityMetric/KernelMetric)
     - [ ] Allow non-identity covariance structure for V (need to change model and inference/slice)
     - [x] Redefine Model so U, V ~ standard Matrix Normal
