@@ -16,7 +16,7 @@
 
 ## to-do
 * Feature:
-    - [ ] **Metric**: log posterior 
+    - [x] **Metric**: log posterior 
     - [ ] **Kernel**: IMQ Kernel 
     - [ ] **Metric**: [Maximum-Mean Discrepancy](http://www.jmlr.org/papers/volume13/gretton12a/gretton12a.pdf)
     - [ ] **Algorithm**: NFVI with [IAF](https://gist.github.com/springcoil/4fda94fcde0934b04fc34967e0c952de)
