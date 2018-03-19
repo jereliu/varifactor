@@ -19,6 +19,8 @@ from varifactor.util.kernel import RBF
 from varifactor.util.result_handler import read_npy, get_eigen
 from varifactor.util.setting import param_model
 
+from varifactor.util.decorator import add_save_plot_option
+
 ####################
 # 1. read in file  #
 ####################
@@ -26,7 +28,7 @@ from varifactor.util.setting import param_model
 res_addr = "./result/Poisson_n50_p5_k2/"
 report_addr = \
     "/home/jeremiah/Dropbox/Research/Harvard/Thesis/Lorenzo/" \
-    "1. varifactor/Report/Progress/2018_02_Week_4/plot/"
+    "1. varifactor/Report/Progress/2018_03_Week_2/plot/"
 
 method_list = os.listdir(res_addr)
 
@@ -36,8 +38,13 @@ Y = dict()
 F = dict()
 eig_F = dict()
 
-sd_u = param_model.u["sd"]
-sd_v = param_model.v["sd"]
+if res_addr == "./result/Poisson_n50_p5_k2/":
+    sd_u = 0.2
+    sd_v = 2
+else:
+    sd_u = param_model.u["sd"]
+    sd_v = param_model.v["sd"]
+
 
 for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
@@ -53,29 +60,39 @@ pk.dump(eig_F, open("./result/eig_F.pkl", "wr"))
 # 2. helper functions               #
 #####################################
 
-def moment_distance(sample, type = "mean", sd_true=1):
-    n_sample, n_iter, dim1, dim2 = sample.shape
 
-    if type == "mean":
-        moment_true = np.zeros(shape=(dim1, dim2))
-        moment_sample = np.mean(sample, axis=0)
-    elif type == "cov":
-        moment_true = np.eye(dim2) * sd_true**2
-        sample_temp = np.swapaxes(sample, 0, 1).reshape(n_iter, n_sample*dim1, dim2)
-        moment_sample = np.array([np.cov(sample_temp[i].T) for i in range(n_iter)])
-    elif type == "prob":
-        dist_iter = np.zeros(shape=n_iter)
-        for iter_id in range(n_iter):
-            sample_iter = sample[:, iter_id, :, :]
-            moment_sample_upper = np.percentile(sample_iter, 97.5, axis=0)
-            moment_sample_lower = np.percentile(sample_iter, 2.5, axis=0)
-            moment_sample = \
-                norm.cdf(moment_sample_upper, loc=0, scale=sd_true) - \
-                norm.cdf(moment_sample_lower, loc=0, scale=sd_true)
-            dist_iter[iter_id] = np.mean(moment_sample)
-        return dist_iter
+def moment_distance(sample, type="mean", sd_true=1):
+    if type == "llik":
+        # likelihood samples with 2 dim
+        dist_iter = np.mean(sample, axis = 0)
+    else:
+        # otherwise raw samples with 4 dim
+        n_sample, n_iter, dim1, dim2 = sample.shape
 
-    dist_iter = np.sqrt(np.mean((moment_sample - moment_true) ** 2, axis=(-2, -1)))
+        if type == "mean":
+            moment_true = np.zeros(shape=(dim1, dim2))
+            moment_sample = np.mean(sample, axis=0)
+
+            dist_iter = np.sqrt(
+                np.mean((moment_sample - moment_true) ** 2, axis=(-2, -1)))
+        elif type == "cov":
+            moment_true = np.eye(dim2) * sd_true**2
+            sample_temp = np.swapaxes(sample, 0, 1).reshape(n_iter, n_sample*dim1, dim2)
+            moment_sample = np.array([np.cov(sample_temp[i].T) for i in range(n_iter)])
+
+            dist_iter = np.sqrt(
+                np.mean((moment_sample - moment_true) ** 2, axis=(-2, -1)))
+
+        elif type == "prob":
+            dist_iter = np.zeros(shape=n_iter)
+            for iter_id in range(n_iter):
+                sample_iter = sample[:, iter_id, :, :]
+                moment_sample_upper = np.percentile(sample_iter, 97.5, axis=0)
+                moment_sample_lower = np.percentile(sample_iter, 2.5, axis=0)
+                moment_sample = \
+                    norm.cdf(moment_sample_upper, loc=0, scale=sd_true) - \
+                    norm.cdf(moment_sample_lower, loc=0, scale=sd_true)
+                dist_iter[iter_id] = np.mean(moment_sample)
 
     return dist_iter
 
@@ -89,7 +106,7 @@ def moment_measure(sample, type="mean", n_boot=500, sd_true=1):
     :param sd_true:
     :return:
     """
-    n_chain, n_iter, dim1, dim2 = sample.shape
+    n_chain, n_iter = sample.shape[:2]
 
     # compute mean
     measure_mean = moment_distance(sample, type=type, sd_true=sd_true)
@@ -107,6 +124,68 @@ def moment_measure(sample, type="mean", n_boot=500, sd_true=1):
 
     return measure_all
 
+
+def compute_llik(u, v, y, lik_fun):
+    """
+
+    :param u: n_chain x n_iter x N x K tensor of latent traits
+    :param v: n_chain x n_iter x P x K tensor of factor loading
+    :param y: n_chain x N x P tensor of observation
+    :param lik_fun: likelihood function
+    :return:
+    """
+    n_chain, n_iter, _, _ = u.shape
+    lik_list = np.zeros(shape=(n_chain, n_iter))
+
+    for chain_id in tqdm(range(n_chain)):
+        y_chain = y[chain_id]
+        for iter_id in range(n_iter):
+            u_iter = u[chain_id, iter_id]
+            v_iter = v[chain_id, iter_id]
+            args = {'u': u_iter, 'v': v_iter, 'y': y_chain}
+            lik_list[chain_id, iter_id] = lik_fun(**args)
+
+    return lik_list
+
+
+@add_save_plot_option
+def measure_plot(measure_dict,
+                 legend_loc="upper left", pal=None, title=None):
+    """
+
+    :param measure_dict:
+            a dictionary of methods: n_iter x 4 summary of target measure
+    :param legend_loc:
+    :param pal: palette, one for each method in the dictionary
+    :param title:
+    :param save_addr:
+    :return:
+    """
+
+    # set up environment & device
+    if pal is None:
+        pal = ["#DC3522", "#11111D", "#0B486D", "#D35400"]
+    method_list = measure_dict.keys()
+
+    # plot
+    sns.set_style('darkgrid')
+    for method_id in range(len(method_list)):
+        method = method_list[method_id]
+        measure_array = measure_dict[method]
+        # mean and ci plot
+        plt.plot(measure_array[:, 2], c=pal[method_id], label = method)
+        plt.fill_between(x=np.arange(measure_array.shape[0]),
+                         y1=measure_array[:, 1],
+                         y2=measure_array[:, 3],
+                         color=pal[method_id], alpha=0.5)
+
+    # add extra stuff
+    plt.legend(loc=legend_loc)
+    if title is not None:
+        plt.title(title)
+
+
+
 #####################################
 # 3. compute per iteration metric   #
 #####################################
@@ -120,32 +199,28 @@ prob_dist = dict()
 for method in method_list:
     sample = F[method]
     mean_dist[method] = moment_measure(sample, type="mean")
-    cov_dist[method] = moment_distance(sample, type="cov")
-    prob_dist[method] = moment_distance(sample, type="prob")
+    cov_dist[method] = moment_measure(sample, type="cov")
+    prob_dist[method] = moment_measure(sample, type="prob")
 
 pk.dump(mean_dist, open("./result/mean.pkl", "wr"))
 pk.dump(cov_dist, open("./result/cov.pkl", "wr"))
 pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
 
 
-# sns.set(style='darkgrid')
-# plt.plot(mean_dist['ADVI'][1:])
-# plt.plot(mean_dist['NUTS'][1:])
-# plt.plot(mean_dist['Metropolis'][1:])
-# plt.show()
-#
-# plt.plot(cov_dist['ADVI'][1:])
-# plt.plot(cov_dist['NUTS'][1:])
-# plt.plot(cov_dist['Metropolis'][1:])
-# plt.ylim((0, 0.2))
-# plt.show()
-#
-# plt.plot(prob_dist['ADVI'][1:])
-# plt.plot(prob_dist['NUTS'][1:])
-# plt.plot(prob_dist['Metropolis'][1:])
-# plt.plot([0, 2000], [0.95, 0.95], "--", color="black")
-# plt.ylim((0.8, 1))
-# plt.show()
+measure_plot(
+    measure_dict=mean_dist,
+    legend_loc="upper right", title="Posterior Mean",
+    save_size=[15, 6], save_addr=report_addr + "/measure/mean_dist.pdf")
+
+measure_plot(
+    measure_dict=cov_dist,
+    legend_loc="upper right", title="Posterior Covariance",
+    save_size=[15, 6], save_addr=report_addr + "/measure/cov_dist.pdf")
+
+measure_plot(
+    measure_dict=prob_dist,
+    legend_loc="lower right", title="95% Coverage Probability",
+    save_size=[15, 6], save_addr=report_addr + "/measure/prob_dist.pdf")
 
 # 3.2. Log-likelihood
 n = 50
@@ -162,15 +237,19 @@ model = Model(y_placeholder, param_model, e=e_placeholder)
 
 # extract sample
 method = method_list[0]
-chain_id = 500
-iter_id = 1000
+llik_dist = dict()
 
-u = U[method][chain_id, iter_id]
-v = V[method][chain_id, iter_id]
-y = Y[method][chain_id]
+for method in method_list:
+    u, v, y = U[method], V[method], Y[method]
+    llik_raw = compute_llik(u, v, y, lik_fun=model.llik_full)
+    llik_dist[method] = moment_measure(llik_raw, type="llik", n_boot=1000)
 
-args = {'u': u, 'v': v, 'y': y}
-model.llik_full(**args)
+pk.dump(llik_dist, open("./result/llik.pkl", "wr"))
+measure_plot(
+    measure_dict=llik_dist,
+    legend_loc="lower right", title="Log Likelihood",
+    save_size=[15, 6], save_addr = report_addr + "/measure/llik_dist.pdf")
+
 
 
 # ##########################################
