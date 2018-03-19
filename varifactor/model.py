@@ -164,7 +164,7 @@ class NEFactorModel(object):
         theta = reduce(np.dot, [u_mat, d_mat, v_mat.T]) + e_mat
 
         # construct likelihood
-        likelihood = np.sum(- y * theta + _nef_partition(theta, family=self.family))
+        likelihood = np.sum(y * theta - _nef_partition(theta, family=self.family))
 
         # construct prior
         prior_u = -0.5 * np.sum(u**2)/(self.u_par['sd']**2)
