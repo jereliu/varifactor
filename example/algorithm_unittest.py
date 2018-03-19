@@ -16,6 +16,8 @@ from varifactor.util.result_handler import get_sample
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from varifactor.util.decorator import add_save_plot_option
+
 
 report_addr = \
     "/home/jeremiah/Dropbox/Research/Harvard/Thesis/Lorenzo/" \
@@ -50,22 +52,17 @@ def contour_2d(data):
     plt.contourf(xx, yy, z, cmap='Blues')
 
 
-def contour2d_grid(sample, save_addr=None, figsize=(20, 20)):
+@add_save_plot_option
+def contour2d_grid(sample):
     """
 
     :param sample: a N x dim1 x dim2 npy array
     :param save_addr:
-    :param figsize:
+    :param save_size:
     :return:
     """
     N, dim1, dim2 = sample.shape
     dim = dim1 * dim2
-
-    # create directory if not exist
-    if save_addr is not None:
-        if not os.path.isdir(os.path.dirname(save_addr)):
-            os.mkdir(os.path.dirname(save_addr))
-        plt.ioff()
 
     # start ploting
     sample_plot = sample.reshape((N, dim))
@@ -82,14 +79,6 @@ def contour2d_grid(sample, save_addr=None, figsize=(20, 20)):
                 print("plotting (%d, %d)" % (i + 1, j + 1))
                 contour_2d((sample_plot[:, (i, j)]))
                 plt.title("(%d, %d)" % (i + 1, j + 1))
-
-    # optionally, save
-    if save_addr is not None:
-        fig = plt.gcf()
-        fig.set_size_inches(figsize[0], figsize[1])
-        fig.savefig(save_addr, bbox_inches='tight')
-        plt.close()
-        plt.ion()
 
 
 
@@ -147,12 +136,12 @@ if sample.method_type == "vi" and not track_vi_during_opt:
 else:
     V_sample = get_sample(sample, "V")
 
-contour2d_grid(V_sample,
-               "%s/contour/%s/%s.pdf" % (report_addr, family, method_name))
+contour2d_grid(sample=V_sample,
+               save_addr="%s/contour/%s/%s.pdf" % (report_addr, family, method_name),
+               save_size=(20, 20))
 
 
 # plot factor norm verses density
-
 N, dim1, dim2 = V_sample.shape
 V_sample_select = V_sample.reshape((N, dim1 * dim2))
 values = V_sample_select[90000:, :3].T
