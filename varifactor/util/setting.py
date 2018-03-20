@@ -18,9 +18,9 @@ param_infer = {
         'Metropolis': {'scaling': 100.},
         'Slice': {'scaling': 100.},
         'NUTS': {'target_accept': 0.8, 'max_treedepth': 10},
-        'ADVI': {'vi_freq': 200},
-        'NFVI': {'flow': 'planar*8', 'jitter': 1., 'vi_freq': 50},
-        'SVGD': {'n_particles': 500, 'jitter': 1., 'vi_freq': 20}
+        'ADVI': {'vi_freq': 200, 'sample_freq': 100},
+        'NFVI': {'flow': 'planar*8', 'jitter': 1., 'vi_freq': 50, 'sample_freq': 25},
+        'SVGD': {'n_particles': 100, 'jitter': 1., 'vi_freq': 20, 'sample_freq': 10}
     }
 }
 

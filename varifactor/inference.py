@@ -78,8 +78,7 @@ class NEFactorInference:
         else:
             method_name = method
 
-        method_setting = self.setting[method_name]
-        result = self._run_sampler[method_name](setting=method_setting)
+        result = self._run_sampler[method_name]()
 
         return result
 
@@ -230,7 +229,10 @@ class NEFactorInference:
             # for compatible purpose, ADVI doesn't have parameters
             setting = self.setting['ADVI'].copy()
             vi_freq = setting['vi_freq']
+            sample_freq = setting['sample_freq']
+
             setting.pop('vi_freq')
+            setting.pop('sample_freq')
 
         # sampling
         with self.model:
@@ -238,9 +240,10 @@ class NEFactorInference:
                          random_seed=_random_seed())
 
             if track:
-                tracker = [pm.callbacks.Tracker(
-                    sample=_single_sample,
-                )]
+                tracker = [
+                    pm.callbacks.Tracker(
+                        sample=_single_sample(sample_freq=sample_freq),)
+                ]
             else:
                 tracker = None
 
@@ -254,6 +257,7 @@ class NEFactorInference:
 
         # extract result
         if track:
+            tracker = tracker[0]
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
@@ -281,7 +285,10 @@ class NEFactorInference:
         if setting is None:
             setting = self.setting['NFVI'].copy()
             vi_freq = setting['vi_freq']
+            sample_freq = setting['sample_freq']
+
             setting.pop('vi_freq')
+            setting.pop('sample_freq')
 
         # sampling
         with self.model:
@@ -290,7 +297,10 @@ class NEFactorInference:
                          **setting)
 
             if track:
-                tracker = [pm.callbacks.Tracker(sample=_single_sample,)]
+                tracker = [
+                    pm.callbacks.Tracker(
+                        sample=_single_sample(sample_freq=sample_freq),)
+                ]
             else:
                 tracker = None
 
@@ -303,6 +313,7 @@ class NEFactorInference:
 
         # extract result
         if track:
+            tracker = tracker[0]
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
@@ -329,8 +340,12 @@ class NEFactorInference:
         # prepare setting
         if setting is None:
             setting = self.setting['SVGD'].copy()
+
             vi_freq = setting['vi_freq']
+            sample_freq = setting['sample_freq']
+
             setting.pop('vi_freq')
+            setting.pop('sample_freq')
 
         # sampling
         with self.model:
@@ -340,7 +355,8 @@ class NEFactorInference:
 
             if track:
                 tracker = [
-                    pm.callbacks.Tracker(sample=_single_sample,)
+                    pm.callbacks.Tracker(
+                        sample=_single_sample(sample_freq=sample_freq),)
                 ]
             else:
                 tracker = None
@@ -354,6 +370,7 @@ class NEFactorInference:
 
         # extract result
         if track:
+            tracker = tracker[0]
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
@@ -366,7 +383,7 @@ class NEFactorInference:
         return result
 
 
-def _single_sample(approx, _, iter):
+def _single_sample(sample_freq=100):
     """
     callback function used to sample from VI iterations
     format follows specification in pymc3.variational.inference.py/_iterate_with_loss
@@ -374,12 +391,16 @@ def _single_sample(approx, _, iter):
     :param approx:
     :param _: score
     :param iter:
+    :param sample_freq: frequency to sample
     :return: a sample (one draw) from target distribution
     """
-    if iter % 100 == 0:
-        return approx.sample(draws=1)
-    else:
-        pass
+    def sample_func(approx, _, iter):
+        if iter % int(sample_freq) == 0:
+            return approx.sample(draws=1)
+        else:
+            pass
+
+    return sample_func
 
 
 def _random_seed():
