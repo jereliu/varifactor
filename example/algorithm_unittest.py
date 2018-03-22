@@ -89,8 +89,8 @@ def contour2d_grid(sample):
 
 family = param_model.y["family"]
 
-N = 100
-P = 3
+N = 50
+P = 5
 K = 2
 
 # generate data

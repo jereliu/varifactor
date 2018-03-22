@@ -77,11 +77,14 @@ def read_npy(addr, ext="npy"):
         # attempt reading the first file
         try:
             sample = np.load(addr + fname_lst[0])
+            sample = np.atleast_1d(sample)
         except IOError:
             print("cannot read npy file " + str(fname_lst[0]))
 
         # extract dimension and build container
-        if len(sample.shape) == 2:
+        if len(sample.shape) == 1:
+            sample_list = np.zeros(shape=len(fname_lst))
+        elif len(sample.shape) == 2:
             # if sample is for a observation, then it has 2 dimensions: dim_1, dim_2
             dim_1, dim_2 = sample.shape
             sample_list = np.zeros(shape=[len(fname_lst), dim_1, dim_2])

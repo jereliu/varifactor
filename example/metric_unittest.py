@@ -30,14 +30,20 @@ report_addr = \
     "/home/jeremiah/Dropbox/Research/Harvard/Thesis/Lorenzo/" \
     "1. varifactor/Report/Progress/2018_03_Week_2/plot/"
 
-method_list = os.listdir(res_addr)
+
+#method_list = os.listdir(res_addr)
+
+method_list = ['ADVI', 'NUTS', 'Slice', 'Metropolis']
 
 U = dict()
 V = dict()
 Y = dict()
 F = dict()
 eig_F = dict()
+T = dict()
 
+
+# be very careful about sd_u and sd_v!
 if res_addr == "./result/Poisson_n50_p5_k2/":
     sd_u = 0.2
     sd_v = 2
@@ -48,11 +54,17 @@ else:
 
 for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
+    print("%s: U" % method)
     U[method] = read_npy(res_addr + "U/")
+    print("%s: V" % method)
     V[method] = read_npy(res_addr + "V/")
-    Y[method] = read_npy(res_addr + "Y/")
-    F[method] = np.concatenate((U[method]/sd_u, V[method]/sd_v), axis=-2)
+    print("%s: F" % method)
+    F[method] = np.concatenate((U[method], V[method]), axis=-2)
     eig_F[method] = get_eigen(F[method])
+    print("%s: Y" % method)
+    Y[method] = read_npy(res_addr + "Y/")
+    print("%s: time" % method)
+    T[method] = np.mean(read_npy(res_addr + "time/"))
 
 pk.dump(eig_F, open("./result/eig_F.pkl", "wr"))
 
@@ -203,7 +215,7 @@ def measure_plot(measure_dict, pal=None,
 
     # set up environment & device
     if pal is None:
-        pal = ["#DC3522", "#11111D", "#0B486D", "#D35400"]
+        pal = ["#DC3522", "#11111D", "#0B486D", "#D35400", "#ECE323", "#286262"]
     method_list = np.sort(measure_dict.keys())
 
     # plot
@@ -239,28 +251,32 @@ prob_dist = dict()
 
 for method in method_list:
     sample = F[method]
-    mean_dist[method] = moment_measure(sample, type="mean")
-    cov_dist[method] = moment_measure(sample, type="cov")
-    prob_dist[method] = moment_measure(sample, type="prob")
+    mean_dist[method] = moment_measure(sample, type="mean", n_boot=100)
+    cov_dist[method] = moment_measure(sample, type="cov", n_boot=100)
+    prob_dist[method] = moment_measure(sample, type="prob", n_boot=100)
 
-pk.dump(mean_dist, open("./result/mean.pkl", "wr"))
-pk.dump(cov_dist, open("./result/cov.pkl", "wr"))
-pk.dump(prob_dist, open("./result/prob.pkl", "wr"))
+pk.dump(mean_dist, open("./result/mean.pkl", "wb"))
+pk.dump(cov_dist, open("./result/cov.pkl", "wb"))
+pk.dump(prob_dist, open("./result/prob.pkl", "wb"))
+
+# mean_dist = pk.load(open("./result/mean.pkl", "rb"))
+# cov_dist = pk.load(open("./result/cov.pkl", "rb"))
+# prob_dist = pk.load(open("./result/prob.pkl", "rb"))
 
 
 measure_plot(
     measure_dict=mean_dist, ylim=(0, 0.17), smooth_span=10,
-    legend_loc="upper right", title="Posterior Mean",
+    legend_loc="upper right", title="Mean Square Error for Prediction",
     save_size=[12, 5], save_addr=report_addr + "/measure/mean_dist.pdf")
 
 measure_plot(
     measure_dict=cov_dist, ylim=(0, 0.5),
-    legend_loc="upper right", title="Posterior Covariance",
+    legend_loc="upper right", title="Mean Square Error for Population Covariance ",
     save_size=[12, 5], save_addr=report_addr + "/measure/cov_dist.pdf")
 
 measure_plot(
     measure_dict=prob_dist, ylim=(0.8, 1),
-    legend_loc="lower right", title="95% Coverage Probability",
+    legend_loc="lower right", title="95% Coverage Probability for U and V",
     save_size=[12, 5], save_addr=report_addr + "/measure/prob_dist.pdf")
 
 # 3.2. Log-likelihood
@@ -268,7 +284,6 @@ n = 50
 p = 5
 k = 2
 mean_true = 0
-sd_true = 0.2
 
 # construct model object
 y_placeholder = theano.shared(np.random.normal(size=(n, p)))
@@ -283,7 +298,7 @@ llik_dist = dict()
 for method in method_list:
     u, v, y = U[method], V[method], Y[method]
     llik_raw = compute_llik(u, v, y, lik_fun=model.llik_full)
-    llik_dist[method] = moment_measure(llik_raw, type="llik", n_boot=1000)
+    llik_dist[method] = moment_measure(llik_raw, type="llik", n_boot=100)
 
 pk.dump(llik_dist, open("./result/llik.pkl", "wr"))
 measure_plot(
@@ -356,5 +371,5 @@ ksd_dist = pk.load(open("./result/ksd.pkl", "r"))
 measure_plot(
     measure_dict=ksd_dist, ylim=(0, 4),
     smooth_span=10, smooth_method="median",
-    legend_loc="upper right", title="KSD for eigenvalue of F",
+    legend_loc="upper right", title="KSD for eigenvalue of U and V",
     save_size=[12, 5], save_addr=report_addr + "/measure/kern_dist.pdf")
