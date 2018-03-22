@@ -81,7 +81,8 @@ class NEFactorModel(object):
 
             # initialize random variables
             u = pm.Normal(name="U",
-                          mu=0, sd=1, shape=(self.k, self.n),
+                          mu=0, sd=1,
+                          shape=(self.k, self.n),
                           observed=u,
                           testval=
                               0 * np.random.normal(
@@ -89,7 +90,8 @@ class NEFactorModel(object):
                                     size=(self.k, self.n))
                           )
             v = pm.Normal(name="V",
-                          mu=0, sd=1, shape=(self.k, self.p),
+                          mu=0, sd=1,
+                          shape=(self.k, self.p),
                           observed=v,
                           testval=
                               0 * np.random.normal(
@@ -107,19 +109,19 @@ class NEFactorModel(object):
 
             # factor transformation, covariance
             # TODO: allow non-identity covariance for v
-            u = self.u_par['sd'] * u
-            v = self.v_par['sd'] * v
-            e = self.eps_sd * e
+            u_t = self.u_par['sd'] * u
+            v_t = self.v_par['sd'] * v
+            e_t = self.eps_sd * e
 
             # factor transformation, activation (transpose then apply func to each col)
             if track_transform:
-                u_t = pm.Deterministic("Ut", _factor_transform(u.T, name=self.u_par["transform"]))
-                v_t = pm.Deterministic("Vt", _factor_transform(v.T, name=self.v_par["transform"]))
-                theta = pm.Deterministic("theta", tt.tensor.dot(u_t, v_t.T) + e)
+                u_t = pm.Deterministic("Ut", _factor_transform(u_t.T, name=self.u_par["transform"]))
+                v_t = pm.Deterministic("Vt", _factor_transform(v_t.T, name=self.v_par["transform"]))
+                theta = pm.Deterministic("theta", tt.tensor.dot(u_t, v_t.T) + e_t)
             else:
-                u_t = _factor_transform(u.T, name=self.u_par["transform"])
-                v_t = _factor_transform(v.T, name=self.v_par["transform"])
-                theta = tt.tensor.dot(u_t, v_t.T) + e
+                u_t = _factor_transform(u_t.T, name=self.u_par["transform"])
+                v_t = _factor_transform(v_t.T, name=self.v_par["transform"])
+                theta = tt.tensor.dot(u_t, v_t.T) + e_t
 
             # theta
             y = _nef_family(name="y", theta=theta, n=self.n, p=self.p,
