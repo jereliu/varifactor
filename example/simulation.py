@@ -102,7 +102,8 @@ if __name__ == "__main__":
     # 1. Initialize Model  ##
     #########################
 
-    family = ["Gaussian", "Binomial", "Poisson"][2]
+    family = param_model.y["family"]
+    assert family == "Poisson"
 
     N = 50
     P = 5
@@ -120,4 +121,4 @@ if __name__ == "__main__":
     # 2. Run Simulation  ####
     #########################
     run_simu(nefm_infer, n_chain=1000,
-             methods=['Slice', 'SVGD'], res_addr=res_path)
+             methods=['NUTS'], res_addr=res_path)
