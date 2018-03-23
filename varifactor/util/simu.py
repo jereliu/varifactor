@@ -5,6 +5,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("data")
 
+
 def data(n, p, k, eps_sd=0.1,
          family="Gaussian",
          uv_scale=[0.1, 0.1],
