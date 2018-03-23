@@ -77,9 +77,12 @@ def contour2d_grid(sample):
                 plt.axis('off')
             else:
                 print("plotting (%d, %d)" % (i + 1, j + 1))
-                contour_2d((sample_plot[:, (i, j)]))
-                plt.title("(%d, %d)" % (i + 1, j + 1))
-
+                try:
+                    contour_2d((sample_plot[:, (i, j)]))
+                    plt.title("(%d, %d)" % (i + 1, j + 1))
+                except np.linalg.LinAlgError:
+                    plt.plot()
+                    plt.axis('off')
 
 
 
@@ -88,9 +91,10 @@ def contour2d_grid(sample):
 #################################################
 
 family = param_model.y["family"]
+param_model.u['sd'] = 0.5
 
-N = 50
-P = 5
+N = 100
+P = 2
 K = 2
 
 # generate data
@@ -101,14 +105,15 @@ y_train, u_train, v_train, e_train = \
 y_train = tt.shared(y_train)
 
 # initialize model
-nefm_model = Model(y_train, param_model, e=e_train)
+nefm_model = Model(y_train, param_model, e=e_train,
+                   parametrization="primal")
 
 # initialize inference
 nefm_infer = Infer(nefm_model, param_infer)
 
 # run method of choice
 method_list = ["Metropolis", "Slice", "NUTS", "ADVI", "NFVI", "SVGD"]
-method_name = method_list[-1]
+method_name = method_list[2]
 track_vi_during_opt = False
 
 # for method_name in method_list[2]:
@@ -136,9 +141,13 @@ if sample.method_type == "vi" and not track_vi_during_opt:
 else:
     V_sample = get_sample(sample, "V")
 
+contour2d_grid(sample=V_sample)
+
+
 contour2d_grid(sample=V_sample,
                save_addr="%s/contour/%s/%s.pdf" % (report_addr, family, method_name),
                save_size=(20, 20))
+
 
 
 # plot factor norm verses density
