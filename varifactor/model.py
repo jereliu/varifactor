@@ -17,7 +17,9 @@ logger = logging.getLogger("model")
 
 class NEFactorModel(object):
     def __init__(self, y, param,
-                 u=None, v=None, e=None, track_transform=False):
+                 u=None, v=None, e=None,
+                 track_transform=False,
+                 parametrization="primal"):
         """
 
         :param y: a theano.tensor.sharedvar.TensorSharedVariable object, created using theano.shared(np.array)
@@ -70,12 +72,48 @@ class NEFactorModel(object):
                     "provided e does not match outcome dimension (%d, %d), "
                     "either supply new u or change model dimension in param.theta['k']" % (self.n, self.p))
 
-
         # initialize model
-
-        nef_factor = pm.Model()
         logging.info('\n====================')
         logging.info('initializing NEF factor analysis model..')
+
+        nef_factor = \
+            self.parametrize_model(
+                parametrization=parametrization,
+                track_transform=track_transform)
+
+        logging.info('initialization done')
+        logging.info('\n====================')
+
+        self.model = nef_factor
+
+
+    ##############################################################################
+    # method for model definition
+    ##############################################################################
+    def parametrize_model(self, parametrization="primal", track_transform=False):
+        """
+        the Primal formulation is the standard formulation using Normal prior
+        for factors.
+
+        the Dual formulation avoids rotation ambiguity of factor loading.
+        It is achieved by sampling factor loading V as Cholesky decomposition
+        of Wishart matrix (using Bartlett decomposition)
+
+        Warning: dual formulation currently not working
+        Warning: only applicable to square V matrix
+        #TODO: add singular Wishart distribution to allow K<P case
+
+        :param parametrization: primal/dual
+        :param track_transform: whether track transformed factors
+        :return:
+        """
+        # parametrization check
+        logging.info('parametrization: %s' % parametrization)
+        if parametrization == "dual":
+            if self.p != self.k:
+                raise ValueError("dual formulation requires P = K")
+
+        nef_factor = pm.Model()
 
         with nef_factor:
 
@@ -83,24 +121,38 @@ class NEFactorModel(object):
             u = pm.Normal(name="U",
                           mu=0, sd=1,
                           shape=(self.k, self.n),
-                          observed=u,
+                          observed=self.u,
                           testval=
                               0 * np.random.normal(
                                     loc=0, scale=self.u_par['sd'],
                                     size=(self.k, self.n))
                           )
-            v = pm.Normal(name="V",
-                          mu=0, sd=1,
-                          shape=(self.k, self.p),
-                          observed=v,
-                          testval=
-                              0 * np.random.normal(
-                                    loc=0, scale=self.v_par['sd'],
-                                    size=(self.k, self.p))
-                          )
+
+            # initialize random variables for V, depending on parametrization
+            if parametrization == "primal":
+                v = pm.Normal(name="V",
+                              mu=0, sd=1,
+                              shape=(self.k, self.p),
+                              observed=self.v,
+                              testval=
+                                  0 * np.random.normal(
+                                        loc=0, scale=self.v_par['sd'],
+                                        size=(self.k, self.p))
+                              )
+            elif parametrization == "dual":
+                # a Barlett decomposition of Wishart with
+                # degree of freedom = nu and covariance S
+                v = pm.WishartBartlett(
+                    name="V",
+                    S=np.eye(self.p), nu=self.p,
+                    testval=np.eye(self.p),
+                    return_cholesky=True
+                )
+
             e = pm.Normal(name="e",
                           mu=0, sd=1,
-                          shape=(self.n, self.p), observed=e,
+                          shape=(self.n, self.p),
+                          observed=self.e,
                           testval=
                               0 * np.random.normal(
                                   loc=0, scale=1,
@@ -125,12 +177,9 @@ class NEFactorModel(object):
 
             # theta
             y = _nef_family(name="y", theta=theta, n=self.n, p=self.p,
-                            family=self.family, observed=y)
+                            family=self.family, observed=self.y)
 
-        logging.info('initialization done')
-        logging.info('\n====================')
-
-        self.model = nef_factor
+        return nef_factor
 
     ##############################################################################
     # method for full distribution: log likelihood
@@ -143,7 +192,7 @@ class NEFactorModel(object):
         :param u: n x k np.array of latent feature
         :param v: p x k np.array of factor loadings
         :param e: n x p np.array of sampled residuals
-        :param e: k x 1 np.array of sampled diagonal element
+        :param d: k x 1 np.array of sampled diagonal element
         :return:
         """
         # TODO: add support for non-identity prior for v
@@ -153,14 +202,19 @@ class NEFactorModel(object):
         if e is None:
             e_mat = np.zeros(shape=(self.n, self.p))
         else:
-            e_mat = e
+            e_mat = e * self.eps_sd
 
         if d is None:
             d_mat = np.ones(shape=self.k)
         d_mat = np.diag(d_mat)
 
-        u_mat = _factor_transform(u.T, name=self.u_par["transform"], format="numpy").T
-        v_mat = _factor_transform(v.T, name=self.v_par["transform"], format="numpy").T
+        u = u * self.u_par['sd']
+        v = v * self.v_par['sd']
+
+        u_mat = _factor_transform(u.T,
+                                  name=self.u_par["transform"], format="numpy").T
+        v_mat = _factor_transform(v.T,
+                                  name=self.v_par["transform"], format="numpy").T
 
         # construct theta
         theta = reduce(np.dot, [u_mat, d_mat, v_mat.T]) + e_mat
@@ -173,6 +227,7 @@ class NEFactorModel(object):
         prior_v = -0.5 * np.sum(v**2)/(self.v_par['sd']**2)
         prior_all = [prior_u, prior_v]
 
+        # optionally, add d and e to list of priors
         if e is not None:
             prior_e = -0.5 * np.sum(e**2)/(self.eps_sd**2)
             prior_all.append(prior_e)
