@@ -10,19 +10,21 @@ param_model = {
 
 param_infer = {
     'chains': 1,
-    'n': 1000,
     'tune': 1000,
     'method': 'NUTS',
     'start': 'zero', # str (MAP / zero /None) indicating init method, or a dict of actual init values
     'setting': {
-        'Metropolis': {'scaling': 100.},
-        'Slice': {'scaling': 100.},
-        'NUTS': {'target_accept': 0.8, 'max_treedepth': 10},
+        'Metropolis': {'n_iter': 1000,
+                       'scaling': 100.},
+        'Slice': {'n_iter': 1000,
+                  'scaling': 100.},
+        'NUTS': {'n_iter': 1000,
+                 'target_accept': 0.8, 'max_treedepth': 10},
         'ADVI': {'vi_freq': 200, 'sample_freq': 100},
-        'NFVI': {'flow': 'planar*2', 'jitter': 1.,
-                 'vi_freq': 50, 'sample_freq': 25},
-        'SVGD': {'n_particles': 100, 'jitter': 1.,
-                 'vi_freq': 20, 'sample_freq': 10}
+        'NFVI': {'vi_freq': 50, 'sample_freq': 25,
+                 'flow': 'scale-hh*20-loc-radial*2', 'jitter': 1.},
+        'SVGD': {'vi_freq': 20, 'sample_freq': 10,
+                 'n_particles': 100, 'jitter': 1.}
     }
 }
 

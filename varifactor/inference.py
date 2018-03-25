@@ -30,7 +30,6 @@ class NEFactorInference:
         logging.info('initializing inference algorithms')
 
         self.model = model.model
-        self.n = int(param.n)
         self.chains = int(param.chains)
         self.tune = int(param.tune)
         self.method = param.method
@@ -47,19 +46,22 @@ class NEFactorInference:
             }
 
         if isinstance(self.start, str):
-            if self.start is 'MAP':
+            if self.start is 'None':
+                logging.info("setting param.start to None..")
+                self.start = None
+            elif self.start is 'MAP':
                 logging.info("setting param.start to MAP..")
                 self.start = pm.find_MAP(model=self.model)
             elif self.start is 'zero':
-                logging.info("setting param.start to zero..")
                 self.start = dict()
                 for var in self.model.unobserved_RVs:
-                    self.start[var.name] = var.init_value * 0
+                    if var.name in ["U", "V", "e"]:
+                        logging.info("setting param.start for %s to 0.." % var.name)
+                        self.start[var.name] = var.init_value * 0
             else:
                 raise ValueError("unrecognized initialization method: self.start=" + self.start)
         else:
             logging.info("starting value is hand-specified by user. ")
-
 
         logging.info('initialization done')
         logging.info('to perform inference with a method, execute .run(method=method)')
@@ -96,6 +98,9 @@ class NEFactorInference:
         # prepare setting
         if setting is None:
             setting = self.setting['Metropolis'].copy()
+            n_iter = setting['n_iter']
+
+            setting.pop('n_iter')
 
         # sampling
         with self.model:
@@ -103,7 +108,7 @@ class NEFactorInference:
 
             t0 = time.time()
             result = pm.sample(step=mc,
-                               draws=self.n,
+                               draws=n_iter,
                                chains=self.chains,
                                random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
@@ -115,7 +120,7 @@ class NEFactorInference:
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
-        result.iter_time = (t1 - t0)/(self.n + self.tune)
+        result.iter_time = (t1 - t0)/(n_iter + self.tune)
 
         return result
 
@@ -135,15 +140,24 @@ class NEFactorInference:
         # TODO: adaptive covariance structure for prior
         if setting is None:
             setting = self.setting['Slice'].copy()
+            n_iter = setting['n_iter']
+
+            setting.pop('n_iter')
 
         with self.model as fa_model:
             # configure covariance matrix
             # TODO: allow non-identity covariance structure
             logging.warning('Setting Prior Covariance to Identity..')
-            v_var = fa_model["V"].distribution.variance.eval()
-            u_diag = np.ones(fa_model["U"].init_value.size)
-            v_diag = np.ones(fa_model["V"].init_value.size) * v_var
-            prior_cov = np.diag(np.concatenate((u_diag, v_diag)))
+            # u_var = fa_model["U"].distribution.variance.eval()
+            # v_var = fa_model["V"].distribution.variance.eval()
+            # u_diag = np.ones(fa_model["U"].init_value.size) * u_var
+            # v_diag = np.ones(fa_model["V"].init_value.size) * v_var
+            # prior_cov = np.diag(np.concatenate((u_diag, v_diag)))
+            prior_cov = \
+                np.diag(
+                    np.ones(fa_model["U"].init_value.size +
+                            fa_model["V"].init_value.size)
+                )
 
             # setup sampler
             var_set_uv = [fa_model["U"], fa_model["V"]]
@@ -160,7 +174,7 @@ class NEFactorInference:
             # sampling
             t0 = time.time()
             result = pm.sample(step=mc_set,
-                               draws=self.n,
+                               draws=n_iter,
                                chains=self.chains,
                                random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
@@ -172,7 +186,7 @@ class NEFactorInference:
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
-        result.iter_time = (t1 - t0)/(self.n + self.tune)
+        result.iter_time = (t1 - t0)/(n_iter + self.tune)
 
         return result
 
@@ -189,6 +203,9 @@ class NEFactorInference:
         # prepare setting
         if setting is None:
             setting = self.setting['NUTS'].copy()
+            n_iter = setting['n_iter']
+
+            setting.pop('n_iter')
 
         # sampling
         with self.model:
@@ -196,7 +213,7 @@ class NEFactorInference:
 
             t0 = time.time()
             result = pm.sample(step=mc,
-                               draws=self.n,
+                               draws=n_iter,
                                chains=self.chains,
                                random_seed=_random_seed(),
                                start=self.start, tune=self.tune,
@@ -208,7 +225,7 @@ class NEFactorInference:
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "mc"
-        result.iter_time = (t1 - t0)/(self.n + self.tune)
+        result.iter_time = (t1 - t0)/(n_iter + self.tune)
 
         return result
 
@@ -248,7 +265,8 @@ class NEFactorInference:
                 tracker = None
 
             t0 = time.time()
-            result = vi.fit(n=self.n * vi_freq,
+            result = vi.fit(n=self.tune * vi_freq,
+                            obj_optimizer=pm.adam(learning_rate=.001),
                             callbacks=tracker)
             t1 = time.time()
 
@@ -261,11 +279,11 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=int(self.n * vi_freq/100))
+                result.sample(draws=int(self.tune * vi_freq/100))
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
-        result.iter_time = (t1 - t0)/(self.n * vi_freq)
+        result.iter_time = (t1 - t0)/(self.tune * vi_freq)
 
         return result
 
@@ -305,7 +323,9 @@ class NEFactorInference:
                 tracker = None
 
             t0 = time.time()
-            result = vi.fit(n=self.n * vi_freq, callbacks=tracker)
+            result = vi.fit(n=self.tune * vi_freq,
+                            obj_optimizer=pm.adam(learning_rate=.001),
+                            callbacks=tracker)
             t1 = time.time()
 
         logging.info('Done!')
@@ -317,11 +337,11 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=int(self.n * vi_freq/100))
+                result.sample(draws=int(self.tune * vi_freq/100))
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
-        result.iter_time = (t1 - t0)/(self.n * vi_freq)
+        result.iter_time = (t1 - t0)/(self.tune * vi_freq)
 
         return result
 
@@ -362,7 +382,7 @@ class NEFactorInference:
                 tracker = None
 
             t0 = time.time()
-            result = vi.fit(n=self.n * vi_freq, callbacks=tracker)
+            result = vi.fit(n=self.tune * vi_freq, callbacks=tracker)
             t1 = time.time()
 
         logging.info('Done!')
@@ -374,11 +394,11 @@ class NEFactorInference:
             result.sample_tracker = tracker['sample']
         else:
             result.sample_tracker = \
-                result.sample(draws=int(self.n * vi_freq/100))
+                result.sample(draws=int(self.tune * vi_freq/100))
 
         # aftermath: add signature & record time (seconds)
         result.method_type = "vi"
-        result.iter_time = (t1 - t0)/(self.n * vi_freq)
+        result.iter_time = (t1 - t0)/(self.tune * vi_freq)
 
         return result
 
