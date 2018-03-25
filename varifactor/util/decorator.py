@@ -35,7 +35,7 @@ def add_plot_option_save(func):
     :return:
     """
 
-    def func_wrapper(save_size, save_addr=None, *args, **kwargs):
+    def func_wrapper(save_size=(20, 20), save_addr=None, *args, **kwargs):
         # create save directory if not exist
         if save_addr is not None:
             if not os.path.isdir(os.path.dirname(save_addr)):
