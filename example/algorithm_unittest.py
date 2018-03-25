@@ -91,9 +91,9 @@ def contour2d_grid(sample):
 #################################################
 
 family = param_model.y["family"]
-param_model.u['sd'] = 0.5
+param_model.u['sd'] = 0.2
 
-N = 100
+N = 50
 P = 2
 K = 2
 
@@ -135,18 +135,26 @@ else:
 #################################
 # 2. Visualize Posterior     ####
 #################################
-# plot
+# plot and save
 if sample.method_type == "vi" and not track_vi_during_opt:
     V_sample = get_sample(sample, "V").T
 else:
     V_sample = get_sample(sample, "V")
 
-contour2d_grid(sample=V_sample)
-
-
 contour2d_grid(sample=V_sample,
                save_addr="%s/contour/%s/%s.pdf" % (report_addr, family, method_name),
                save_size=(20, 20))
+
+# additionally, visualize posterior of inner/outer product of V
+# (much better behaved)
+V_sample_outer = np.array([v.dot(v.T) for v in V_sample])
+V_sample_inner = np.array([v.T.dot(v) for v in V_sample])
+
+contour2d_grid(sample=V_sample)
+contour2d_grid(sample=V_sample_outer)
+contour2d_grid(sample=V_sample_inner)
+
+
 
 
 
