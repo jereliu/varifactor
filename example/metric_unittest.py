@@ -30,8 +30,9 @@ report_addr = \
     "/home/jeremiah/Dropbox/Research/Harvard/Thesis/Lorenzo/" \
     "1. varifactor/Report/Progress/2018_03_Week_2/plot/"
 
-method_list = ['Metropolis', 'NUTS', 'ADVI']#, 'ADVI']
-#method_list = os.listdir(res_addr)
+method_list = ['Metropolis', 'NUTS', 'ADVI']
+# method_list = ['Metropolis', 'NUTS', 'ADVI', 'NFVI']
+# method_list = os.listdir(res_addr)
 
 U = dict()
 V = dict()
@@ -39,16 +40,6 @@ Y = dict()
 F = dict()
 eig_F = dict()
 T = dict()
-
-
-# be very careful about sd_u and sd_v!
-if res_addr == "./result/Poisson_n50_p5_k2/":
-    sd_u = 0.2
-    sd_v = 2
-else:
-    sd_u = param_model.u["sd"]
-    sd_v = param_model.v["sd"]
-
 
 for method in method_list:
     res_addr = "./result/Poisson_n50_p5_k2/%s/" % (method)
@@ -103,6 +94,13 @@ def moment_distance(sample, type="mean", sd_true=1):
                     norm.cdf(moment_sample_upper, loc=0, scale=sd_true) - \
                     norm.cdf(moment_sample_lower, loc=0, scale=sd_true)
                 dist_iter[iter_id] = np.mean(moment_sample)
+
+        elif type == "llik_prior":
+            dist_iter = np.zeros(shape=n_iter)
+            for iter_id in range(n_iter):
+                sample_iter = sample[:, iter_id, :, :]
+                moment_sample = np.mean(norm.logpdf(sample_iter))
+                dist_iter[iter_id] = moment_sample
 
     return dist_iter
 
@@ -198,7 +196,8 @@ def iter_smooth(sample, span=5, method="mean"):
 @add_plot_option(option="save")
 def measure_plot(measure_dict, time_dict,
                  pal=None, smooth_span=5, smooth_method="mean",
-                 legend_loc="upper left", ylim=None, title=None):
+                 xaxis_type="time", ylim=None,
+                 legend_loc="upper left", title=None):
     """
 
     :param measure_dict:
@@ -208,6 +207,7 @@ def measure_plot(measure_dict, time_dict,
     :param pal: palette, one for each method in the dictionary
     :param smooth_span: num of iterations to include for line smoothing
     :param legend_loc: location of legend 'upper/lower' + 'left/right'
+    :param xaxis_type: type for x-axis: iteration or time
     :param ylim: (optional) limit for y-axis
     :param title: (optional) parameter, plot title
     :return:
@@ -220,27 +220,40 @@ def measure_plot(measure_dict, time_dict,
 
     # plot
     sns.set_style('darkgrid')
-    time_span = np.inf
+    x_span = np.inf
     for method_id in range(len(method_list)):
         method = method_list[method_id]
         measure_array = measure_dict[method]
         measure_array = \
             iter_smooth(measure_array, span=smooth_span, method=smooth_method)
-        step_time = time_dict[method]
-        time_array = np.arange(measure_array.shape[0]-1) * step_time
-        time_span = np.min((time_span, np.max(time_array)))
+        if xaxis_type == "iter":
+            x_array = np.arange(measure_array.shape[0]-1)
+            x_span = np.max(x_array)
+        elif xaxis_type == "time":
+            step_time = time_dict[method]
+            if method == "ADVI":
+                step_time = step_time/50
+            elif method == "NFVI":
+                step_time = step_time/100
+            x_array = np.arange(measure_array.shape[0]-1) * step_time
+            x_span = np.min((x_span, np.max(x_array)))
+
         # mean and ci plot
-        plt.plot(time_array, measure_array[1:, 2],
+        plt.plot(x_array, measure_array[1:, 2],
                  c=pal[method_id], label=method)
-        plt.fill_between(x=time_array,
+        plt.fill_between(x=x_array,
                          y1=measure_array[1:, 1],
                          y2=measure_array[1:, 3],
                          color=pal[method_id], alpha=0.5)
 
     # add extra stuff
     plt.legend(loc=legend_loc)
-    plt.xlim((0, time_span))
-    plt.xlabel("Elapsed Time (seconds)")
+    if xaxis_type == "time":
+        plt.xlim((-x_span/100, x_span + x_span/100))
+        plt.xlabel("Elapsed Time (seconds)")
+    else:
+        plt.xlabel("Iterations")
+
     if title is not None:
         plt.title(title)
     if ylim is not None:
@@ -266,6 +279,7 @@ model = Model(y_placeholder, param_model, e=e_placeholder)
 mean_dist = dict()
 cov_dist = dict()
 prob_dist = dict()
+plik_dist = dict()
 llik_dist = dict()
 
 # mean_dist = pk.load(open("./result/mean.pkl", "rb"))
@@ -284,7 +298,9 @@ for method in method_list:
     cov_dist[method] = moment_measure(sample, type="cov", n_boot=100)
     print("%s: coverage probability" % method)
     prob_dist[method] = moment_measure(sample, type="prob", n_boot=100)
-    print("%s: log likelihood" % method)
+    print("%s: prior log likelihood" % method)
+    plik_dist[method] = moment_measure(sample, type="llik_prior", n_boot=100)
+    print("%s: posterior log likelihood" % method)
     llik_raw = compute_llik(u, v, y, lik_fun=model.llik_full)
     llik_dist[method] = moment_measure(llik_raw, type="llik", n_boot=100)
 
@@ -292,32 +308,44 @@ for method in method_list:
 pk.dump(mean_dist, open("./result/mean.pkl", "wb"))
 pk.dump(cov_dist, open("./result/cov.pkl", "wb"))
 pk.dump(prob_dist, open("./result/prob.pkl", "wb"))
-pk.dump(llik_dist, open("./result/llik.pkl", "wr"))
+pk.dump(plik_dist, open("./result/plik.pkl", "wb"))
+pk.dump(llik_dist, open("./result/llik.pkl", "wb"))
 
 
 measure_plot(
     measure_dict=mean_dist, time_dict=T,
-    ylim=(0, 0.17), smooth_span=10, legend_loc="upper right",
+    xaxis_type="iter",
+    ylim=(0, 0.1), smooth_span=5, legend_loc="upper right",
     title="Mean Square Error for Prediction",
-    save_size=[12, 5], save_addr=report_addr + "/measure/mean_dist.pdf")
+    save_size=[10, 5], save_addr=report_addr + "/measure/mean_dist.pdf")
 
 measure_plot(
     measure_dict=cov_dist, time_dict=T,
+    xaxis_type="iter",
     ylim=(0, 0.5), legend_loc="upper right",
     title="Mean Square Error for Population Covariance ",
-    save_size=[12, 5], save_addr=report_addr + "/measure/cov_dist.pdf")
+    save_size=[10, 5], save_addr=report_addr + "/measure/cov_dist.pdf")
 
 measure_plot(
     measure_dict=prob_dist, time_dict=T,
+    xaxis_type="iter",
     ylim=(0.8, 1), legend_loc="lower right",
     title="95% Coverage Probability for U and V",
-    save_size=[12, 5], save_addr=report_addr + "/measure/prob_dist.pdf")
+    save_size=[10, 5], save_addr=report_addr + "/measure/prob_dist.pdf")
+
+measure_plot(
+    measure_dict=plik_dist, time_dict=T,
+    xaxis_type="iter",
+    ylim=(-2, -1), smooth_span=3, legend_loc="lower right",
+    title="Prior Log Likelihood",
+    save_size=[10, 5], save_addr=report_addr + "/measure/plik_dist.pdf")
 
 measure_plot(
     measure_dict=llik_dist, time_dict=T,
-    ylim=(-300, -220), smooth_span=10, legend_loc="lower right",
-    title="Log Likelihood",
-    save_size=[12, 5], save_addr=report_addr + "/measure/llik_dist.pdf")
+    xaxis_type="iter",
+    ylim=(-300, -220), smooth_span=3, legend_loc="lower right",
+    title="Posterior Log Likelihood",
+    save_size=[10, 5], save_addr=report_addr + "/measure/llik_dist.pdf")
 
 
 
